@@ -1,12 +1,13 @@
-import assert from "assert";
-import { readFile, readFileSync } from "fs";
+import { readFileSync } from "fs";
+import { basename } from "path";
 import { Lexer, Token } from "./lexer";
 
 export function compile(inputPath: string, outputPath: string): void {
     let data: string = readFileSync(inputPath, { encoding: 'utf8' });
-    console.log(data);
-    let lexer = new Lexer(data);
-    for (let token = Token.ILLEGAL; token != Token.EOF; token = lexer.next()) {
-        console.log(token);
+    let lexer = new Lexer(basename(inputPath), data);
+    let token = Token.ILLEGAL;
+    while (token != Token.EOF) {
+        token = lexer.next();
+        console.log(Token.toString(token));
     }
 }

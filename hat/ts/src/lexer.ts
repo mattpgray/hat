@@ -12,6 +12,28 @@ enum Token {
     ADD // +
 }
 
+namespace Token {
+    export function toString(token: Token): string {
+        return `Token.${Token[token]}`;
+    }
+}
+
+class Position {
+    file: string;
+    line: number;
+    column: number;
+
+    constructor(file: string, line: number, column: number) {
+        this.file = file;
+        this.line = line;
+        this.column = column;
+    }
+
+    toString(): string {
+        return `${this.file}:${this.line}:${this.column}`;
+    }
+}
+
 interface Position {
     file: string;
     line: number;
@@ -19,13 +41,14 @@ interface Position {
 }
 
 class Lexer {
+    filename: string;
     data: string;
     line: string;
     col: number;
     lineNumber: number;
 
-
-    constructor(data: string) {
+    constructor(filename: string, data: string) {
+        this.filename = filename;
         this.data = data;
         this.col = 0;
         this.line = '';
@@ -45,16 +68,16 @@ class Lexer {
     }
 
     _nextTokenInLine(): Token | null {
-        for (const char of this._iter()) {
-            console.log(`main ${char}`);
+        const iter = this._iter();
+        for (const char of iter) {
             if (isWhitespace(char)) {
                 continue;
             }
             if (isDigit(char)) {
-                return this._consumeNumber();
+                return this._consumeNumber(iter);
             }
-            if (char === '#') {
-                return this._consumeComment();
+            if (char === '/') {
+                return this._consumeComment(iter);
             }
             // this._unexpectedToken();
         }
@@ -67,8 +90,8 @@ class Lexer {
             this.line = this.data;
             this.data = '';
         } else {
-            this.line = this.data.slice(0, idx);
-            this.data = this.data.slice(idx);
+            this.line = this.data.slice(0, idx + 1);
+            this.data = this.data.slice(idx + 1);
         }
         if (this.line.length === 0) {
             this.col = 0;
@@ -80,9 +103,9 @@ class Lexer {
         console.log(`line ${this.line}`);
     }
 
-    _consumeNumber(): Token.INT {
+    _consumeNumber(iter: Generator<string, void, unknown>): Token.INT {
         const start = this.col - 1;
-        for (let char of this._iter()) {
+        for (let char of iter) {
             if (isWhitespace(char)) {
                 break;
             }
@@ -93,21 +116,29 @@ class Lexer {
             this._unexpectedToken();
         }
         const number = this.line.slice(start, this.col - 1);
-        console.log(`number ${number} at position ${this.lineNumber}:${this.col}`);
+        console.log(`number ${number} at position ${this._position(0).toString()}`);
         return Token.INT;
     }
 
-    _consumeComment(): Token.COMMENT {
+    _consumeComment(iter: Generator<string, void, unknown>): Token.COMMENT {
+        let next = iter.next();
+        if (next.done) {
+            this._unexpectedToken(-1);
+        }
+        let nextChar = next.value;
+        if (nextChar !== '/') {
+            this._unexpectedToken();
+        }
         let comment = this.line.slice(this.col).trimRight();
-        console.log(`comment ${comment} at position ${this.lineNumber}:${this.col}`);
+        console.log(`comment ${comment} at position ${this._position(0).toString()}`);
         // Consume the rest of the line without altering the line buffer so that we keep
         // line scanning to main tokenizing loop
         this.col = this.line.length;
         return Token.COMMENT;
     }
 
-    _unexpectedToken(): never {
-        throw new Error(`unexpected token ${this._currentChar()} at position ${this.lineNumber}:${this.col}`);
+    _unexpectedToken(offset: number = 0): never {
+        unexpectedToken(this._currentChar(), this._position(offset));
     }
 
     *_iter() {
@@ -120,6 +151,15 @@ class Lexer {
     _currentChar(): string {
         return this.line.charAt(this.col - 1);
     }
+
+    _position(offset: number): Position {
+        return new Position(this.filename, this.lineNumber, this.col + offset);
+
+    }
+}
+
+function unexpectedToken(s: string, pos: Position): never {
+    throw new Error(`unexpected token ${s} at position ${pos.toString}`);
 }
 
 function isWhitespace(c: string): boolean {
