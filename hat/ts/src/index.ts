@@ -139,7 +139,7 @@ function main() {
             usage();
             exit(0);
         case 'compile':
-            runCompile(options, args);
+            runCompile(options, args.slice(1));
             break;
         default:
             stderr.write(`invalid compiler mode ${args[0]}\n`);
