@@ -68,18 +68,27 @@ class Lexer {
     }
 
     _nextTokenInLine(): Token | null {
-        const iter = this._iter();
-        for (const char of iter) {
-            if (isWhitespace(char)) {
-                continue;
-            }
+        // We are either:
+        // 1. On a new line so need to read the first char
+        // 2. In the loop after emitting a token and so we have already
+        //   cosumeed
+        // Either way we do not need to step.
+        let loop = true;
+        while (loop) {
+            const char = this._currentChar();
+            // All of the consumers step by themselves and so we so not need to step again
             if (isDigit(char)) {
-                return this._consumeNumber(iter);
+                return this._consumeNumber();
             }
             if (char === '/') {
-                return this._consumeComment(iter);
+                return this._consumeComment();
             }
-            // this._unexpectedToken();
+            // Whitespace does not need to be emitted and so we can step
+            if (isWhitespace(char)) {
+                loop = this._step();
+                continue;
+            }
+            this._unexpectedToken();
         }
         return null;
     }
@@ -100,12 +109,12 @@ class Lexer {
         }
         this.col = 1;
         this.lineNumber++;
-        console.log(`line ${this.line}`);
     }
 
-    _consumeNumber(iter: Generator<string, void, unknown>): Token.INT {
+    _consumeNumber(): Token.INT {
         const start = this.col - 1;
-        for (let char of iter) {
+        while (this._step()) {
+            const char = this._currentChar();
             if (isWhitespace(char)) {
                 break;
             }
@@ -120,12 +129,11 @@ class Lexer {
         return Token.INT;
     }
 
-    _consumeComment(iter: Generator<string, void, unknown>): Token.COMMENT {
-        let next = iter.next();
-        if (next.done) {
+    _consumeComment(): Token.COMMENT {
+        if (this._step()) {
             this._unexpectedToken(-1);
         }
-        let nextChar = next.value;
+        let nextChar = this._currentChar();
         if (nextChar !== '/') {
             this._unexpectedToken();
         }
@@ -141,11 +149,12 @@ class Lexer {
         unexpectedToken(this._currentChar(), this._position(offset));
     }
 
-    *_iter() {
-        while (this.col <= this.line.length) {
-            yield this._currentChar();
-            this.col++;
+    _step(): boolean {
+        if (this.col >= this.line.length) {
+            return false;
         }
+        this.col++;
+        return true;
     }
 
     _currentChar(): string {
@@ -154,7 +163,6 @@ class Lexer {
 
     _position(offset: number): Position {
         return new Position(this.filename, this.lineNumber, this.col + offset);
-
     }
 }
 
