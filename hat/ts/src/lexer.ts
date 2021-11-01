@@ -113,18 +113,20 @@ class Lexer {
 
     _consumeNumber(): Token.INT {
         const start = this.col - 1;
+        let end = this.col;
         while (this._step()) {
             const char = this._currentChar();
             if (isWhitespace(char)) {
                 break;
             }
             if (isDigit(char)) {
+                end++;
                 continue;
             }
             // TODO: hex/binary/octal
             this._unexpectedToken();
         }
-        const number = this.line.slice(start, this.col - 1);
+        const number = this.line.slice(start, end);
         console.log(`number ${number} at position ${this._position(0).toString()}`);
         return Token.INT;
     }
@@ -150,10 +152,10 @@ class Lexer {
     }
 
     _step(): boolean {
+        this.col++;
         if (this.col >= this.line.length) {
             return false;
         }
-        this.col++;
         return true;
     }
 
