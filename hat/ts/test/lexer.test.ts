@@ -52,3 +52,14 @@ test('expect to consume comment after integer', () => {
     expect(lexer.next()).toStrictEqual({ type: TokenType.COMMENT, value: '// my comment' });
     expect(lexer.next()).toStrictEqual({ type: TokenType.EOF });
 });
+
+test('expect to consume operation', () => {
+    const lexer = new Lexer('', '+ -2+ ');
+    expect(lexer.next()).toStrictEqual({ type: TokenType.ADD });
+    expect(lexer.next()).toStrictEqual({ type: TokenType.SUB });
+    expect(lexer.next()).toStrictEqual({ type: TokenType.INT, value: 2 });
+    expect(lexer.next()).toStrictEqual({ type: TokenType.ADD });
+    expect(lexer.next()).toStrictEqual({ type: TokenType.EOF });
+});
+
+

@@ -9,7 +9,9 @@ enum TokenType {
     INT, // 1213
 
     // Operations
-    ADD // +
+    ADD, // +
+    SUB, // -
+
 }
 
 interface Token {
@@ -20,7 +22,6 @@ interface Token {
 function tokenTypeString(token: TokenType): string {
     return `TokenType.${TokenType[token]}`;
 }
-
 
 class Position {
     file: string;
@@ -80,17 +81,19 @@ class Lexer {
         let loop = this._hasChar();
         while (loop) {
             const char = this._currentChar();
-            // All of the consumers step by themselves and so we so not need to step again
-            if (isDigit(char)) {
-                return this._consumeNumber();
-            }
-            if (char === '/') {
-                return this._consumeComment();
-            }
             // Whitespace does not need to be emitted and so we can step
             if (isWhitespace(char)) {
                 loop = this._step();
                 continue;
+            }
+            // All of the consumers step by themselves and so we so not need to step again
+            if (isDigit(char)) {
+                return this._consumeNumber();
+            }
+            switch (char) {
+                case '/': return this._consumeComment();
+                case '+': return this._consumeSingleCharacterOperation(TokenType.ADD);
+                case '-': return this._consumeSingleCharacterOperation(TokenType.SUB);
             }
             this._unexpectedToken();
         }
@@ -127,6 +130,9 @@ class Lexer {
                 end++;
                 continue;
             }
+            if ('+-'.indexOf(char) >= 0) {
+                break;
+            }
             // TODO: hex/binary/octal
             this._unexpectedToken();
         }
@@ -155,6 +161,28 @@ class Lexer {
         };
     }
 
+    _consumeSingleCharacterOperation(type: TokenType): Token {
+        if (!this._step()) {
+            this._unexpectedToken(-1);
+        }
+        let char = this._currentChar();
+        if (!isWhitespace(char) && !isDigit(char) && !this._peekString('/')) {
+            this._unexpectedToken(0);
+        }
+        return { type: type };
+    }
+
+    _peekString(s: string): boolean {
+        if (!this._hasChar()) {
+            return s === '';
+        }
+        const remaining = this.line.length - this.col + 1;
+        if (s.length > remaining) {
+            return false;
+        }
+        return this.line.slice(this.col - 1, this.col - 1 + s.length) === s;
+    }
+
     _unexpectedToken(offset: number = 0): never {
         unexpectedToken(this._currentChar(), this._position(offset));
     }
@@ -181,7 +209,7 @@ class Lexer {
 }
 
 function unexpectedToken(s: string, pos: Position): never {
-    throw new Error(`unexpected token ${s} at position ${pos.toString()}`);
+    throw new Error(`unexpected token "${s}" at position ${pos.toString()}`);
 }
 
 function isWhitespace(c: string): boolean {
