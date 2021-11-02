@@ -1,5 +1,5 @@
 
-enum Token {
+enum TokenType {
     // Special tokens
     ILLEGAL = 1,
     EOF,
@@ -12,11 +12,15 @@ enum Token {
     ADD // +
 }
 
-namespace Token {
-    export function toString(token: Token): string {
-        return `Token.${Token[token]}`;
-    }
+interface Token {
+    type: TokenType;
+    value?: string | number;
 }
+
+function tokenTypeString(token: TokenType): string {
+    return `TokenType.${TokenType[token]}`;
+}
+
 
 class Position {
     file: string;
@@ -64,7 +68,7 @@ class Lexer {
             }
             this._nextLine();
         }
-        return Token.EOF;
+        return { type: TokenType.EOF };
     }
 
     _nextTokenInLine(): Token | null {
@@ -111,7 +115,7 @@ class Lexer {
         this.lineNumber++;
     }
 
-    _consumeNumber(): Token.INT {
+    _consumeNumber(): Token {
         const start = this.col - 1;
         let end = this.col;
         while (this._step()) {
@@ -127,12 +131,14 @@ class Lexer {
             this._unexpectedToken();
         }
         const number = this.line.slice(start, end);
-        console.log(`number ${number} at position ${this._position(0).toString()}`);
-        return Token.INT;
+        return {
+            type: TokenType.INT,
+            value: parseInt(number)
+        };
     }
 
-    _consumeComment(): Token.COMMENT {
-        if (this._step()) {
+    _consumeComment(): Token {
+        if (!this._step()) {
             this._unexpectedToken(-1);
         }
         let nextChar = this._currentChar();
@@ -140,11 +146,13 @@ class Lexer {
             this._unexpectedToken();
         }
         let comment = this.line.slice(this.col).trimRight();
-        console.log(`comment ${comment} at position ${this._position(0).toString()}`);
         // Consume the rest of the line without altering the line buffer so that we keep
         // line scanning to main tokenizing loop
-        this.col = this.line.length;
-        return Token.COMMENT;
+        this.col = this.line.length + 1;
+        return {
+            type: TokenType.COMMENT,
+            value: "//" + comment
+        };
     }
 
     _unexpectedToken(offset: number = 0): never {
@@ -192,5 +200,7 @@ function isDigit(c: string): boolean {
 export {
     Lexer,
     Token,
-    Position,
+    TokenType,
+    tokenTypeString,
+    Position
 };
