@@ -73,7 +73,7 @@ class Lexer {
         // 2. In the loop after emitting a token and so we have already
         //   cosumeed
         // Either way we do not need to step.
-        let loop = true;
+        let loop = this._hasChar();
         while (loop) {
             const char = this._currentChar();
             // All of the consumers step by themselves and so we so not need to step again
@@ -151,9 +151,13 @@ class Lexer {
         unexpectedToken(this._currentChar(), this._position(offset));
     }
 
+    _hasChar(): boolean {
+        return this.col <= this.line.length;
+    }
+
     _step(): boolean {
         this.col++;
-        if (this.col >= this.line.length) {
+        if (!this._hasChar()) {
             return false;
         }
         return true;
@@ -169,7 +173,7 @@ class Lexer {
 }
 
 function unexpectedToken(s: string, pos: Position): never {
-    throw new Error(`unexpected token ${s} at position ${pos.toString}`);
+    throw new Error(`unexpected token ${s} at position ${pos.toString()}`);
 }
 
 function isWhitespace(c: string): boolean {
