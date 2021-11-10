@@ -1,13 +1,13 @@
 import { readFileSync } from "fs";
 import { basename } from "path";
-import { Lexer, Token } from "./lexer";
+import { Lexer, tokenTypeString, TokenType } from "./lexer";
 
 export function compile(inputPath: string, outputPath: string): void {
     let data: string = readFileSync(inputPath, { encoding: 'utf8' });
     let lexer = new Lexer(basename(inputPath), data);
-    let token = Token.ILLEGAL;
-    while (token != Token.EOF) {
+    let token = lexer.next();
+    while (token.type != TokenType.EOF) {
         token = lexer.next();
-        console.log(Token.toString(token));
+        console.log(tokenTypeString(token.type));
     }
 }

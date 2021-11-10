@@ -1,3 +1,5 @@
+import { ENGINE_METHOD_CIPHERS } from "constants";
+import { DefaultDeserializer } from "v8";
 
 enum TokenType {
     // Special tokens
@@ -11,11 +13,15 @@ enum TokenType {
     // Operations
     ADD, // +
     SUB, // -
+    MUL, // *
+    DIV, // /
 
 }
 
 interface Token {
     type: TokenType;
+    start: Position;
+    text: string;
     value?: string | number;
 }
 
@@ -69,7 +75,7 @@ class Lexer {
             }
             this._nextLine();
         }
-        return { type: TokenType.EOF };
+        return { type: TokenType.EOF, text: '', start: this._position(0) };
     }
 
     _nextTokenInLine(): Token | null {
@@ -90,10 +96,35 @@ class Lexer {
             if (isDigit(char)) {
                 return this._consumeNumber();
             }
+            if (isLetter(char) || char === '_' || char === '$') {
+                return this._consumeWord();
+            }
             switch (char) {
-                case '/': return this._consumeComment();
-                case '+': return this._consumeSingleCharacterOperation(TokenType.ADD);
-                case '-': return this._consumeSingleCharacterOperation(TokenType.SUB);
+                case '/':
+                    if (this._step() && this._currentChar() === '/') {
+                        // Comments consume until the end of the line
+                        const start = this._position(-1);
+                        let comment = this.line.slice(this.col);
+                        while (comment.length > 0) {
+                            let lastChar = comment.slice(-1);
+                            if (lastChar === '\r' || lastChar === '\n') {
+                                comment = comment.slice(0, -1);
+                                continue;
+                            }
+                            break;
+                        }
+                        this.col = this.line.length + 1;
+                        return {
+                            type: TokenType.COMMENT,
+                            text: '//' + comment,
+                            start: start,
+                            value: comment,
+                        };
+                    }
+                    return { type: TokenType.DIV, text: '/', start: this._position(-1) };
+                case '+': this._step(); return { type: TokenType.ADD, text: '+', start: this._position(-1) };
+                case '-': this._step(); return { type: TokenType.SUB, text: '-', start: this._position(-1) };
+                case '*': this._step(); return { type: TokenType.MUL, text: '*', start: this._position(-1) };
             }
             this._unexpectedToken();
         }
@@ -118,58 +149,44 @@ class Lexer {
         this.lineNumber++;
     }
 
+    _consumeWord(): Token {
+        const start = this._position(0);
+        const word = this._consumeMatching(function (char: string): boolean {
+            return isDigit(char) || isLetter(char) || char === '_' || char === '$';
+        });
+        return {
+            type: TokenType.INT,
+            text: word,
+            value: word,
+            start: start,
+        };
+    }
+
     _consumeNumber(): Token {
+        const start = this._position(0);
+        const number = this._consumeMatching(isDigit);
+        return {
+            type: TokenType.INT,
+            text: number,
+            value: parseInt(number),
+            start: start
+        };
+    }
+
+    _consumeMatching(matcher: (char: string) => boolean): string {
         const start = this.col - 1;
         let end = this.col;
         while (this._step()) {
             const char = this._currentChar();
-            if (isWhitespace(char)) {
-                break;
-            }
-            if (isDigit(char)) {
+            if (matcher(char)) {
                 end++;
                 continue;
             }
-            if ('+-'.indexOf(char) >= 0) {
-                break;
-            }
-            // TODO: hex/binary/octal
-            this._unexpectedToken();
+            break;
         }
         const number = this.line.slice(start, end);
-        return {
-            type: TokenType.INT,
-            value: parseInt(number)
-        };
-    }
+        return this.line.slice(start, end);
 
-    _consumeComment(): Token {
-        if (!this._step()) {
-            this._unexpectedToken(-1);
-        }
-        let nextChar = this._currentChar();
-        if (nextChar !== '/') {
-            this._unexpectedToken();
-        }
-        let comment = this.line.slice(this.col).trimRight();
-        // Consume the rest of the line without altering the line buffer so that we keep
-        // line scanning to main tokenizing loop
-        this.col = this.line.length + 1;
-        return {
-            type: TokenType.COMMENT,
-            value: "//" + comment
-        };
-    }
-
-    _consumeSingleCharacterOperation(type: TokenType): Token {
-        if (!this._step()) {
-            this._unexpectedToken(-1);
-        }
-        let char = this._currentChar();
-        if (!isWhitespace(char) && !isDigit(char) && !this._peekString('/')) {
-            this._unexpectedToken(0);
-        }
-        return { type: type };
     }
 
     _peekString(s: string): boolean {
@@ -223,6 +240,10 @@ function isWhitespace(c: string): boolean {
 
 function isDigit(c: string): boolean {
     return (c >= '0') && (c <= '9');
+}
+
+function isLetter(c: string): boolean {
+    return ('a' < c && c < 'z') || ('A' < c && c < 'Z');
 }
 
 export {

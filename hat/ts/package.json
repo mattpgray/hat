@@ -22,5 +22,8 @@
   },
   "dependencies": {
     "@types/node": "^16.11.6"
+  },
+  "jest": {
+    "rootDir": "./test"
   }
 }
