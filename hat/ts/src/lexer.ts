@@ -16,6 +16,7 @@ enum TokenType {
     MUL, // *
     DIV, // /
 
+    WORD, // General word. Mapped to keywords in the parser
 }
 
 interface Token {
@@ -155,7 +156,7 @@ class Lexer {
             return isDigit(char) || isLetter(char) || char === '_' || char === '$';
         });
         return {
-            type: TokenType.INT,
+            type: TokenType.WORD,
             text: word,
             value: word,
             start: start,
@@ -243,7 +244,7 @@ function isDigit(c: string): boolean {
 }
 
 function isLetter(c: string): boolean {
-    return ('a' < c && c < 'z') || ('A' < c && c < 'Z');
+    return ('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z');
 }
 
 export {

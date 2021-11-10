@@ -63,4 +63,18 @@ test('expect to consume operation', () => {
     expect(lexer.next()).toStrictEqual({ type: TokenType.EOF, text: '', start: new Position('', 0, 0) });
 });
 
+test('expect to consume words', () => {
+    const lexer = new Lexer('', 'words $$ __ a1');
+    expect(lexer.next()).toStrictEqual({ type: TokenType.WORD, text: 'words', value: 'words', start: new Position('', 1, 1) });
+    expect(lexer.next()).toStrictEqual({ type: TokenType.WORD, text: '$$', value: '$$', start: new Position('', 1, 7) });
+    expect(lexer.next()).toStrictEqual({ type: TokenType.WORD, text: '__', value: '__', start: new Position('', 1, 10) });
+    expect(lexer.next()).toStrictEqual({ type: TokenType.WORD, text: 'a1', value: 'a1', start: new Position('', 1, 13) });
+    expect(lexer.next()).toStrictEqual({ type: TokenType.EOF, text: '', start: new Position('', 0, 0) });
+});
 
+test('expect number before words', () => {
+    const lexer = new Lexer('', '1a');
+    expect(lexer.next()).toStrictEqual({ type: TokenType.INT, text: '1', value: 1, start: new Position('', 1, 1) });
+    expect(lexer.next()).toStrictEqual({ type: TokenType.WORD, text: 'a', value: 'a', start: new Position('', 1, 2) });
+    expect(lexer.next()).toStrictEqual({ type: TokenType.EOF, text: '', start: new Position('', 0, 0) });
+});
