@@ -6,7 +6,8 @@
   "scripts": {
     "build": "npx tsc",
     "hat": "node ./hat/index.js",
-    "test": "jest"
+    "test": "jest",
+    "update-test": "node ./hat/scripts/generate-tests.js"
   },
   "author": "",
   "license": "ISC",
