@@ -5,6 +5,7 @@ enum TokenType {
     ILLEGAL = 1,
     EOF,
     COMMENT,
+    NEWLINE, // Not using semi colons. Require on comments and newlines for expression ends
 
     // Identifiers
     INT, // 1213
@@ -88,11 +89,6 @@ class Lexer {
         let loop = this._hasChar();
         while (loop) {
             const char = this._currentChar();
-            // Whitespace does not need to be emitted and so we can step
-            if (isWhitespace(char)) {
-                loop = this._step();
-                continue;
-            }
             // All of the consumers step by themselves and so we so not need to step again
             if (isDigit(char)) {
                 return this._consumeNumber();
@@ -127,6 +123,12 @@ class Lexer {
                 case '-': this._step(); return { type: TokenType.SUB, text: '-', start: this._position(-1) };
                 case '*': this._step(); return { type: TokenType.MUL, text: '*', start: this._position(-1) };
                 case '=': this._step(); return { type: TokenType.EQ, text: '=', start: this._position(-1) };
+                case '\n': this._step(); return { type: TokenType.NEWLINE, text: '\n', start: this._position(-1) };
+            }
+            // Whitespace does not need to be emitted and so we can step
+            if (isWhitespace(char)) {
+                loop = this._step();
+                continue;
             }
             this._unexpectedToken();
         }

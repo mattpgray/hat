@@ -94,6 +94,15 @@
                 }
             },
             {
+                "type": 4,
+                "text": "\n",
+                "start": {
+                    "file": "",
+                    "line": 1,
+                    "column": 12
+                }
+            },
+            {
                 "type": 5,
                 "text": "12",
                 "value": 12,
@@ -131,6 +140,15 @@
                     "file": "",
                     "line": 2,
                     "column": 9
+                }
+            },
+            {
+                "type": 4,
+                "text": "\n",
+                "start": {
+                    "file": "",
+                    "line": 2,
+                    "column": 10
                 }
             },
             {

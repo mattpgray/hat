@@ -25,13 +25,11 @@ for (let testCase of testCases) {
                 text: testToken.text,
                 start: new Position(testToken.start.file, testToken.start.line, testToken.start.column)
             }
-        if (testToken.value != undefined && testToken.value != null) {
-    	    token.value = testToken.value;
-        }
-        return token;
+            if (testToken.value != undefined && testToken.value != null) {
+                token.value = testToken.value;
+            }
+            return token;
         });
-    	console.log(output);
-    	console.log(expected);
         expect(output).toStrictEqual(expected);
     });
 }
