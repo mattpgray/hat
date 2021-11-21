@@ -53,13 +53,14 @@ test('expect to consume comment after integer', () => {
 });
 
 test('expect to consume operation', () => {
-    const lexer = new Lexer('', '+ -2+ */');
+    const lexer = new Lexer('', '+ -2+ */=');
     expect(lexer.next()).toStrictEqual({ type: TokenType.ADD, text: '+', start: new Position('', 1, 1) });
     expect(lexer.next()).toStrictEqual({ type: TokenType.SUB, text: '-', start: new Position('', 1, 3) });
     expect(lexer.next()).toStrictEqual({ type: TokenType.INT, value: 2, text: '2', start: new Position('', 1, 4) });
     expect(lexer.next()).toStrictEqual({ type: TokenType.ADD, text: '+', start: new Position('', 1, 5) });
     expect(lexer.next()).toStrictEqual({ type: TokenType.MUL, text: '*', start: new Position('', 1, 7) });
     expect(lexer.next()).toStrictEqual({ type: TokenType.DIV, text: '/', start: new Position('', 1, 8) });
+    expect(lexer.next()).toStrictEqual({ type: TokenType.EQ,  text: '=', start: new Position('', 1, 9) });
     expect(lexer.next()).toStrictEqual({ type: TokenType.EOF, text: '', start: new Position('', 0, 0) });
 });
 

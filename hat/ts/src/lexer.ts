@@ -1,5 +1,4 @@
-import { ENGINE_METHOD_CIPHERS } from "constants";
-import { DefaultDeserializer } from "v8";
+import {stderr, exit} from "process";
 
 enum TokenType {
     // Special tokens
@@ -15,6 +14,7 @@ enum TokenType {
     SUB, // -
     MUL, // *
     DIV, // /
+    EQ,  // =
 
     WORD, // General word. Mapped to keywords in the parser
 }
@@ -126,6 +126,7 @@ class Lexer {
                 case '+': this._step(); return { type: TokenType.ADD, text: '+', start: this._position(-1) };
                 case '-': this._step(); return { type: TokenType.SUB, text: '-', start: this._position(-1) };
                 case '*': this._step(); return { type: TokenType.MUL, text: '*', start: this._position(-1) };
+                case '=': this._step(); return { type: TokenType.EQ, text: '=', start: this._position(-1) };
             }
             this._unexpectedToken();
         }
@@ -227,7 +228,8 @@ class Lexer {
 }
 
 function unexpectedToken(s: string, pos: Position): never {
-    throw new Error(`unexpected token "${s}" at position ${pos.toString()}`);
+    stderr.write(`${pos.toString()} unexpected token "${s}"\n`);
+    exit(1);
 }
 
 function isWhitespace(c: string): boolean {
