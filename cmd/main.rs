@@ -16,6 +16,7 @@ fn position_string(pos: &Position) -> String {
 struct Token {
     position: Position,
     typ: TokenType,
+    str_val: String,
 }
 
 #[derive(Copy, Clone)]
@@ -23,6 +24,10 @@ enum TokenType {
     OpenCurly,
     CloseCurly,
     SemiColon,
+}
+
+fn is_word_char(c: char) -> bool {
+    (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '$' || c == '_'
 }
 
 fn lex_file(filename: &String) -> Vec<Token>{
@@ -57,13 +62,14 @@ fn lex_file(filename: &String) -> Vec<Token>{
         }
         let curr = &contents[idx..];
         let mut token_type: TokenType = TokenType::OpenCurly;
+        let mut str_val: String = "".to_string();
         let start = Position {
             filename: filename.to_string(),
             row: row,
             col: col,
         };
         println!("{}: {:?}", position_string(&start), &curr.chars().nth(0));
-        let mut width: i32 = 0;
+        let mut width: usize = 0;
 
         if curr.starts_with("//") {
             while idx < contents.len() {
@@ -91,24 +97,41 @@ fn lex_file(filename: &String) -> Vec<Token>{
             token_type = TokenType::CloseCurly;
         } else {
             assert!(curr.len() > 0);
-            // Matches
-            let char = match curr.chars().next() {
+            let mut chars = curr.chars();
+            let c = match chars.next() {
                 None => {
                     eprintln!("{}: Unexpected end of file", position_string(&start));
                     process::exit(1);
                 },
                 Some(c) => {
-                    eprintln!("{}: Unexpected token {}", position_string(&start), c);
-                    process::exit(1);
+                    c
                 },
             };
+            // Match word
+            if is_word_char(c) {
+                let mut word_width: usize = 1;
+                while let Some(c) = chars.next() {
+                    if !is_word_char(c) {
+                        break;
+                    }
+                    word_width = word_width + 1;
+                }
+                println!("word remnants: {}", curr);
+                str_val = curr[..word_width].to_string();
+                println!("word: {}", str_val);
+                width = word_width;
+            } else {
+                eprintln!("{}: Unexpected token {}", position_string(&start), c);
+                process::exit(1);
+            }
         }
         tokens.push(Token {
             position: start,
             typ: token_type,
+            str_val: str_val,
         });
-        idx = idx + width as usize;
-        col = col + width;
+        idx = idx + width;
+        col = col + width as i32;
     }
     return tokens;
 }
