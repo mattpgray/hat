@@ -22,6 +22,7 @@ struct Token {
 enum TokenType {
     OpenCurly,
     CloseCurly,
+    SemiColon,
 }
 
 fn lex_file(filename: &String) -> Vec<Token>{
@@ -63,7 +64,26 @@ fn lex_file(filename: &String) -> Vec<Token>{
         };
         println!("{}: {:?}", position_string(&start), &curr.chars().nth(0));
         let mut width: i32 = 0;
-        if curr.starts_with('{') {
+
+        if curr.starts_with("//") {
+            while idx < contents.len() {
+                let curr = &contents[idx..];
+                 if curr.starts_with('\n') {
+                    idx = idx + 1;
+                    row = row + 1;
+                    col = 1;
+                    break;
+                 }
+                 idx = idx + 1;
+            }
+            continue;
+        }
+
+        // Match simple tokens
+        if curr.starts_with(';') {
+            width = 1;
+            token_type = TokenType::SemiColon;
+        } else if curr.starts_with('{') {
             width = 1;
             token_type = TokenType::OpenCurly;
         } else if curr.starts_with('}') {
@@ -71,6 +91,7 @@ fn lex_file(filename: &String) -> Vec<Token>{
             token_type = TokenType::CloseCurly;
         } else {
             assert!(curr.len() > 0);
+            // Matches
             let char = match curr.chars().next() {
                 None => {
                     eprintln!("{}: Unexpected end of file", position_string(&start));
