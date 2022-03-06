@@ -1,14 +1,5 @@
-{}{
-    {};
-    // asdfo
-    // {} ;
-
-
-$_az_AZ_$
-{{
-
-let my_int int 123;
-
-0
-12345678
+// My first test proc
+proc main() {
+    #print(1);
+}
 
