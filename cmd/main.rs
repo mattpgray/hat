@@ -1,6 +1,6 @@
 use std::env;
-use std::process;
 use std::fs;
+use std::process;
 
 #[derive(Clone)]
 struct Position {
@@ -46,7 +46,7 @@ fn is_digit(c: char) -> bool {
     c >= '0' && c <= '9'
 }
 
-fn lex_file(filename: &String) -> Vec<Token>{
+fn lex_file(filename: &String) -> Vec<Token> {
     let contents = match fs::read_to_string(filename) {
         Err(e) => {
             eprintln!("Failed to read file {}: {}", filename, e);
@@ -89,13 +89,13 @@ fn lex_file(filename: &String) -> Vec<Token>{
         if curr.starts_with("//") {
             while idx < contents.len() {
                 let curr = &contents[idx..];
-                 if curr.starts_with('\n') {
+                if curr.starts_with('\n') {
                     idx = idx + 1;
                     row = row + 1;
                     col = 1;
                     break;
-                 }
-                 idx = idx + 1;
+                }
+                idx = idx + 1;
             }
             continue;
         }
@@ -117,10 +117,8 @@ fn lex_file(filename: &String) -> Vec<Token>{
                 None => {
                     eprintln!("{}: Unexpected end of file", position_string(&start));
                     process::exit(1);
-                },
-                Some(c) => {
-                    c
-                },
+                }
+                Some(c) => c,
             };
             // Match word
             if is_word_char(c) {
@@ -176,13 +174,18 @@ fn main() {
             }
             let lexemes = lex_file(&args.remove(0));
             for lexeme in lexemes.iter() {
-                println!("{}: {}, {}", position_string(&lexeme.position), token_type_string(lexeme.typ), lexeme.str_val);
+                println!(
+                    "{}: {}, {}",
+                    position_string(&lexeme.position),
+                    token_type_string(lexeme.typ),
+                    lexeme.str_val
+                );
             }
-        },
+        }
         "help" => {
             usage();
             process::exit(0);
-        },
+        }
         _ => {
             eprintln!("Unknown subcommand {}", subcommand);
             usage();
