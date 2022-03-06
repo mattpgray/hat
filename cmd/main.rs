@@ -24,10 +24,26 @@ enum TokenType {
     OpenCurly,
     CloseCurly,
     SemiColon,
+    Word,
+    IntLiteral,
+}
+
+fn token_type_string(t: TokenType) -> String {
+    match t {
+        TokenType::OpenCurly => "{".to_string(),
+        TokenType::CloseCurly => "}".to_string(),
+        TokenType::SemiColon => ";".to_string(),
+        TokenType::Word => "word".to_string(),
+        TokenType::IntLiteral => "int literal".to_string(),
+    }
 }
 
 fn is_word_char(c: char) -> bool {
-    (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '$' || c == '_'
+    (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '$' || c == '_' || is_digit(c)
+}
+
+fn is_digit(c: char) -> bool {
+    c >= '0' && c <= '9'
 }
 
 fn lex_file(filename: &String) -> Vec<Token>{
@@ -68,7 +84,6 @@ fn lex_file(filename: &String) -> Vec<Token>{
             row: row,
             col: col,
         };
-        println!("{}: {:?}", position_string(&start), &curr.chars().nth(0));
         let mut width: usize = 0;
 
         if curr.starts_with("//") {
@@ -116,10 +131,9 @@ fn lex_file(filename: &String) -> Vec<Token>{
                     }
                     word_width = word_width + 1;
                 }
-                println!("word remnants: {}", curr);
                 str_val = curr[..word_width].to_string();
-                println!("word: {}", str_val);
                 width = word_width;
+                token_type = TokenType::Word;
             } else {
                 eprintln!("{}: Unexpected token {}", position_string(&start), c);
                 process::exit(1);
@@ -160,7 +174,10 @@ fn main() {
                 usage();
                 process::exit(1);
             }
-            lex_file(&args.remove(0));
+            let lexemes = lex_file(&args.remove(0));
+            for lexeme in lexemes.iter() {
+                println!("{}: {}, {}", position_string(&lexeme.position), token_type_string(lexeme.typ), lexeme.str_val);
+            }
         },
         "help" => {
             usage();
