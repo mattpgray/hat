@@ -17,6 +17,7 @@ struct Token {
     position: Position,
     typ: TokenType,
     str_val: String,
+    int_val: u64,
 }
 
 #[derive(Copy, Clone)]
@@ -79,6 +80,7 @@ fn lex_file(filename: &String) -> Vec<Token> {
         let curr = &contents[idx..];
         let mut token_type: TokenType = TokenType::OpenCurly;
         let mut str_val: String = "".to_string();
+        let mut int_val: u64 = 0;
         let start = Position {
             filename: filename.to_string(),
             row: row,
@@ -120,8 +122,26 @@ fn lex_file(filename: &String) -> Vec<Token> {
                 }
                 Some(c) => c,
             };
-            // Match word
-            if is_word_char(c) {
+
+            // ints first so that words can contain numbers after the first char
+            if is_digit(c) {
+                let mut word_width: usize = 1;
+                while let Some(c) = chars.next() {
+                    if !is_digit(c) {
+                        break;
+                    }
+                    word_width = word_width + 1;
+                }
+                let int_str = curr[..word_width].to_string();
+                // Parse as decimal
+                for c in int_str.chars() {
+                    int_val *= 10;
+                    int_val += c as u64 - '0' as u64;
+                }
+
+                width = word_width;
+                token_type = TokenType::IntLiteral;
+            } else if is_word_char(c) {
                 let mut word_width: usize = 1;
                 while let Some(c) = chars.next() {
                     if !is_word_char(c) {
@@ -141,6 +161,7 @@ fn lex_file(filename: &String) -> Vec<Token> {
             position: start,
             typ: token_type,
             str_val: str_val,
+            int_val: int_val,
         });
         idx = idx + width;
         col = col + width as i32;
@@ -175,10 +196,11 @@ fn main() {
             let lexemes = lex_file(&args.remove(0));
             for lexeme in lexemes.iter() {
                 println!(
-                    "{}: {}, {}",
+                    "{}: {}, {}, {}",
                     position_string(&lexeme.position),
                     token_type_string(lexeme.typ),
-                    lexeme.str_val
+                    lexeme.str_val,
+                    lexeme.int_val,
                 );
             }
         }
