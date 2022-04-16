@@ -14,7 +14,7 @@ impl fmt::Display for Loc {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     // Special chars
     OpenCurly,
@@ -23,10 +23,14 @@ pub enum TokenKind {
     CloseParen,
     SemiColon,
     Hash,
+    Comma,
 
     // Literals
     IntLiteral(u64),
     Word,
+    Keyword(Keyword),
+
+    // Keywords
 
     // Terminators
     Invalid,
@@ -41,11 +45,35 @@ impl fmt::Display for TokenKind {
             TokenKind::OpenParen => write!(f, "("),
             TokenKind::CloseParen => write!(f, ")"),
             TokenKind::SemiColon => write!(f, ";"),
+            TokenKind::Comma => write!(f, ","),
             TokenKind::Hash => write!(f, "#"),
             TokenKind::IntLiteral(val) => write!(f, "int({})", val),
             TokenKind::Word => write!(f, "word"),
+            TokenKind::Keyword(_) => write!(f, "keyword"),
             TokenKind::Invalid => write!(f, "invalid"),
             TokenKind::EOF => write!(f, "EOF"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Keyword {
+    Proc,
+}
+
+impl fmt::Display for Keyword {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Keyword::Proc => write!(f, "proc"),
+        }
+    }
+}
+
+impl Keyword {
+    fn from(s: &str) -> Option<Self> {
+        match s {
+            "proc" => Some(Keyword::Proc),
+            _ => None,
         }
     }
 }
@@ -181,6 +209,11 @@ impl<Chars: Iterator<Item = char>> Lexer<Chars> {
                         loc,
                         text: c.to_string(),
                     },
+                    ',' => Token {
+                        kind: TokenKind::Comma,
+                        loc,
+                        text: c.to_string(),
+                    },
                     '#' => Token {
                         kind: TokenKind::Hash,
                         loc,
@@ -218,10 +251,17 @@ impl<Chars: Iterator<Item = char>> Lexer<Chars> {
                                 _ => break,
                             }
                         }
-                        Token {
-                            kind: TokenKind::Word,
-                            loc,
-                            text: word,
+                        match Keyword::from(&word) {
+                            Some(kw) => Token {
+                                kind: TokenKind::Keyword(kw),
+                                loc,
+                                text: word,
+                            },
+                            None => Token {
+                                kind: TokenKind::Word,
+                                loc,
+                                text: word,
+                            },
                         }
                     }
                     _ => Token {
