@@ -1,5 +1,5 @@
 // My first test proc
 proc main() {
-    #print(1);
+    #print(112);
 }
 
