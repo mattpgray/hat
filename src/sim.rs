@@ -75,17 +75,22 @@ impl Context {
                 self.run_expr(expr)?;
                 Ok(())
             }
-            Stmt::If { cond, then } => self.run_if(cond, then),
+            Stmt::If { cond, then, else_ } => self.run_if(cond, then, else_),
         }
     }
 
-    fn run_if(&mut self, cond: &Expr, then: &Vec<Stmt>) -> Result<(), ExecutionError> {
+    fn run_if(
+        &mut self,
+        cond: &Expr,
+        then: &Vec<Stmt>,
+        else_: &Vec<Stmt>,
+    ) -> Result<(), ExecutionError> {
         let cond_result = self.run_expr(cond)?;
         expect_expr_result(&cond_result, 1)?;
         if cond_result.results[0] != 0 {
             self.run_stmts(then)
         } else {
-            Ok(())
+            self.run_stmts(else_)
         }
     }
 

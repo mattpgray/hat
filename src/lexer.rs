@@ -32,6 +32,7 @@ pub enum TokenKind {
     // Keywords
     Proc,
     If,
+    Else,
 
     // Terminators
     Invalid,
@@ -52,6 +53,7 @@ impl fmt::Display for TokenKind {
             TokenKind::Word => write!(f, "word"),
             TokenKind::Proc => write!(f, "proc"),
             TokenKind::If => write!(f, "if"),
+            TokenKind::Else => write!(f, "else"),
             TokenKind::Invalid => write!(f, "invalid"),
             TokenKind::EOF => write!(f, "EOF"),
         }
@@ -63,6 +65,7 @@ impl TokenKind {
         match k {
             "proc" => Some(TokenKind::Proc),
             "if" => Some(TokenKind::If),
+            "else" => Some(TokenKind::Else),
             _ => None,
         }
     }

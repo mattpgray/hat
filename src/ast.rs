@@ -75,7 +75,11 @@ pub struct Proc {
 #[derive(Debug)]
 pub enum Stmt {
     Expr(Expr),
-    If { cond: Expr, then: Vec<Stmt> },
+    If {
+        cond: Expr,
+        then: Vec<Stmt>,
+        else_: Vec<Stmt>,
+    },
 }
 
 impl Stmt {
@@ -110,17 +114,36 @@ impl Stmt {
             TokenKind::OpenCurly => {
                 todo!("Parsing of nested blocks is not implemented yet.");
             }
-            TokenKind::If => {
-                l.next();
-                let cond = Expr::parse(l)?;
-                let then = Self::parse_block(l)?;
-                Ok(Stmt::If { cond, then })
-            }
+            TokenKind::If => Self::parse_if(l),
             _ => {
                 let expr = Expr::parse(l)?;
                 expect_token_kind(l, TokenKind::SemiColon)?;
                 Ok(Stmt::Expr(expr))
             }
+        }
+    }
+
+    fn parse_if(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Stmt, SyntaxError> {
+        expect_token_kind(l, TokenKind::If)?;
+        let cond = Expr::parse(l)?;
+        let then = Self::parse_block(l)?;
+
+        let tok = l.peek();
+        match tok.kind {
+            TokenKind::Else => {
+                l.next();
+                let else_ = Self::parse_block(l)?;
+                Ok(Stmt::If {
+                    cond,
+                    then: then,
+                    else_: else_,
+                })
+            }
+            _ => Ok(Stmt::If {
+                cond,
+                then: then,
+                else_: Vec::new(),
+            }),
         }
     }
 }
@@ -186,6 +209,7 @@ impl Expr {
             | TokenKind::SemiColon
             | TokenKind::Proc
             | TokenKind::If
+            | TokenKind::Else
             | TokenKind::Comma => {
                 return Err(SyntaxError::UnexpectedToken {
                     loc: tok.loc,
