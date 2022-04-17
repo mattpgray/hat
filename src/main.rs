@@ -2,7 +2,6 @@ use std::env;
 use std::fs;
 use std::process;
 use std::process::exit;
-use std::str::Chars;
 mod ast;
 mod lexer;
 
@@ -40,8 +39,14 @@ fn main() {
         "ast" => {
             let (file_path, file_data) = get_file_path_and_data(&mut args);
             let mut l = lexer::Lexer::new(file_data.chars(), file_path);
-            let ast = ast::AST::parse(&mut l).unwrap();
-            println!("{:?}", ast);
+            match ast::AST::parse(&mut l) {
+                Err(err) => {
+                    eprintln!("{}: syntax error: {}", err.loc(), err)
+                }
+                Ok(ast) => {
+                    println!("{:?}", ast);
+                }
+            }
         }
         "lex" => {
             let (file_path, file_data) = get_file_path_and_data(&mut args);

@@ -26,11 +26,11 @@ pub enum TokenKind {
     Comma,
 
     // Literals
-    IntLiteral(u64),
+    IntLiteral,
     Word,
-    Keyword(Keyword),
 
     // Keywords
+    Proc,
 
     // Terminators
     Invalid,
@@ -47,32 +47,19 @@ impl fmt::Display for TokenKind {
             TokenKind::SemiColon => write!(f, ";"),
             TokenKind::Comma => write!(f, ","),
             TokenKind::Hash => write!(f, "#"),
-            TokenKind::IntLiteral(val) => write!(f, "int({})", val),
+            TokenKind::IntLiteral => write!(f, "int literal"),
             TokenKind::Word => write!(f, "word"),
-            TokenKind::Keyword(_) => write!(f, "keyword"),
+            TokenKind::Proc => write!(f, "proc"),
             TokenKind::Invalid => write!(f, "invalid"),
             TokenKind::EOF => write!(f, "EOF"),
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum Keyword {
-    Proc,
-}
-
-impl fmt::Display for Keyword {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Keyword::Proc => write!(f, "proc"),
-        }
-    }
-}
-
-impl Keyword {
-    fn from(s: &str) -> Option<Self> {
-        match s {
-            "proc" => Some(Keyword::Proc),
+impl TokenKind {
+    fn from_keyword(k: &str) -> Option<TokenKind> {
+        match k {
+            "proc" => Some(TokenKind::Proc),
             _ => None,
         }
     }
@@ -113,17 +100,21 @@ impl<Chars: Iterator<Item = char>> Lexer<Chars> {
     }
 
     pub fn peek(&mut self) -> &Token {
-        match self.peeked {
+        let tok = match self.peeked {
             Some(ref t) => t,
             None => {
-                let t = self.next();
+                let t = self.read_token();
                 self.peeked.insert(t)
             }
-        }
+        };
+        println!("peek {:?}", tok);
+        tok
     }
 
     pub fn next(&mut self) -> Token {
-        self.peeked.take().unwrap_or_else(|| self.read_token())
+        let tok = self.peeked.take().unwrap_or_else(|| self.read_token());
+        println!("next {:?}", tok);
+        tok
     }
 
     fn trim_whitespace(&mut self) {
@@ -234,7 +225,7 @@ impl<Chars: Iterator<Item = char>> Lexer<Chars> {
                             }
                         }
                         Token {
-                            kind: TokenKind::IntLiteral(int_val),
+                            kind: TokenKind::IntLiteral,
                             loc,
                             text,
                         }
@@ -251,9 +242,9 @@ impl<Chars: Iterator<Item = char>> Lexer<Chars> {
                                 _ => break,
                             }
                         }
-                        match Keyword::from(&word) {
-                            Some(kw) => Token {
-                                kind: TokenKind::Keyword(kw),
+                        match TokenKind::from_keyword(&word) {
+                            Some(kind) => Token {
+                                kind: kind,
                                 loc,
                                 text: word,
                             },
