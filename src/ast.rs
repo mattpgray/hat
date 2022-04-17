@@ -80,6 +80,7 @@ pub enum Stmt {
         then: Vec<Stmt>,
         else_: Vec<Stmt>,
     },
+    Block(Vec<Stmt>),
 }
 
 impl Stmt {
@@ -111,9 +112,7 @@ impl Stmt {
         let tok = l.peek();
 
         match tok.kind {
-            TokenKind::OpenCurly => {
-                todo!("Parsing of nested blocks is not implemented yet.");
-            }
+            TokenKind::OpenCurly => Ok(Stmt::Block(Self::parse_block(l)?)),
             TokenKind::If => Self::parse_if(l),
             _ => {
                 let expr = Expr::parse(l)?;

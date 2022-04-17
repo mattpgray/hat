@@ -75,6 +75,7 @@ impl Context {
                 self.run_expr(expr)?;
                 Ok(())
             }
+            Stmt::Block(block) => self.run_stmts(&block),
             Stmt::If { cond, then, else_ } => self.run_if(cond, then, else_),
         }
     }
