@@ -75,6 +75,7 @@ pub struct Proc {
 #[derive(Debug)]
 pub enum Stmt {
     Expr(Expr),
+    If { cond: Expr, then: Vec<Stmt> },
 }
 
 impl Stmt {
@@ -105,15 +106,22 @@ impl Stmt {
     fn parse(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Stmt, SyntaxError> {
         let tok = l.peek();
 
-        let stmt = match tok.kind {
+        match tok.kind {
             TokenKind::OpenCurly => {
                 todo!("Parsing of nested blocks is not implemented yet.");
             }
-            _ => Ok(Stmt::Expr(Expr::parse(l)?)),
-        }?;
-
-        expect_token_kind(l, TokenKind::SemiColon)?;
-        Ok(stmt)
+            TokenKind::If => {
+                l.next();
+                let cond = Expr::parse(l)?;
+                let then = Self::parse_block(l)?;
+                Ok(Stmt::If { cond, then })
+            }
+            _ => {
+                let expr = Expr::parse(l)?;
+                expect_token_kind(l, TokenKind::SemiColon)?;
+                Ok(Stmt::Expr(expr))
+            }
+        }
     }
 }
 
@@ -177,6 +185,7 @@ impl Expr {
             | TokenKind::CloseParen
             | TokenKind::SemiColon
             | TokenKind::Proc
+            | TokenKind::If
             | TokenKind::Comma => {
                 return Err(SyntaxError::UnexpectedToken {
                     loc: tok.loc,

@@ -31,6 +31,7 @@ pub enum TokenKind {
 
     // Keywords
     Proc,
+    If,
 
     // Terminators
     Invalid,
@@ -50,6 +51,7 @@ impl fmt::Display for TokenKind {
             TokenKind::IntLiteral => write!(f, "int literal"),
             TokenKind::Word => write!(f, "word"),
             TokenKind::Proc => write!(f, "proc"),
+            TokenKind::If => write!(f, "if"),
             TokenKind::Invalid => write!(f, "invalid"),
             TokenKind::EOF => write!(f, "EOF"),
         }
@@ -60,6 +62,7 @@ impl TokenKind {
     fn from_keyword(k: &str) -> Option<TokenKind> {
         match k {
             "proc" => Some(TokenKind::Proc),
+            "if" => Some(TokenKind::If),
             _ => None,
         }
     }

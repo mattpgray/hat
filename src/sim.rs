@@ -36,6 +36,16 @@ struct ExprResult {
     results: Vec<u64>,
 }
 
+fn expect_expr_result(result: &ExprResult, want: usize) -> Result<(), ExecutionError> {
+    if result.results.len() != want {
+        return Err(ExecutionError::InvalidExpressionResult {
+            want,
+            got: result.results.len(),
+        });
+    }
+    Ok(())
+}
+
 #[derive(Default)]
 pub struct Context {}
 
@@ -65,6 +75,17 @@ impl Context {
                 self.run_expr(expr)?;
                 Ok(())
             }
+            Stmt::If { cond, then } => self.run_if(cond, then),
+        }
+    }
+
+    fn run_if(&mut self, cond: &Expr, then: &Vec<Stmt>) -> Result<(), ExecutionError> {
+        let cond_result = self.run_expr(cond)?;
+        expect_expr_result(&cond_result, 1)?;
+        if cond_result.results[0] != 0 {
+            self.run_stmts(then)
+        } else {
+            Ok(())
         }
     }
 
@@ -105,12 +126,7 @@ impl Context {
         let mut results = Vec::new();
         for arg in args {
             let arg_result = self.run_expr(arg)?;
-            if arg_result.results.len() != 1 {
-                return Err(ExecutionError::InvalidExpressionResult {
-                    want: 1,
-                    got: arg_result.results.len(),
-                });
-            }
+            expect_expr_result(&arg_result, 1)?;
             results.extend(arg_result.results);
         }
         Ok(results)
