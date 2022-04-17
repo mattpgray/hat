@@ -1,9 +1,12 @@
 use std::env;
+use std::fmt;
 use std::fs;
 use std::process;
 use std::process::exit;
+
 mod ast;
 mod lexer;
+mod sim;
 
 //------------------------------ parser end --------------------------------
 
@@ -26,6 +29,41 @@ fn get_file_path_and_data(args: &mut Vec<String>) -> (String, String) {
     (file_path.clone(), fs::read_to_string(file_path).unwrap())
 }
 
+enum SimulationError {
+    SyntaxError(ast::SyntaxError),
+    ExecutionError(sim::ExecutionError),
+}
+
+impl From<ast::SyntaxError> for SimulationError {
+    fn from(err: ast::SyntaxError) -> Self {
+        SimulationError::SyntaxError(err)
+    }
+}
+
+impl From<sim::ExecutionError> for SimulationError {
+    fn from(err: sim::ExecutionError) -> Self {
+        SimulationError::ExecutionError(err)
+    }
+}
+
+impl fmt::Display for SimulationError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            SimulationError::SyntaxError(e) => write!(f, "{}: syntax error: {}", e.loc(), e),
+            SimulationError::ExecutionError(e) => write!(f, "execution error: {}", e),
+        }
+    }
+}
+
+fn simulate_program(
+    lexer: &mut lexer::Lexer<impl Iterator<Item = char>>,
+) -> Result<(), SimulationError> {
+    let ast = ast::AST::parse(lexer)?;
+    let mut ctx = sim::Context::default();
+    ctx.run(ast)?;
+    Ok(())
+}
+
 fn main() {
     let mut args: Vec<String> = env::args().collect();
     args.remove(0);
@@ -46,6 +84,16 @@ fn main() {
                 Ok(ast) => {
                     println!("{:?}", ast);
                 }
+            }
+        }
+        "sim" => {
+            let (file_path, file_data) = get_file_path_and_data(&mut args);
+            let mut l = lexer::Lexer::new(file_data.chars(), file_path);
+            match simulate_program(&mut l) {
+                Err(err) => {
+                    eprintln!("{}", err);
+                }
+                Ok(()) => {}
             }
         }
         "lex" => {

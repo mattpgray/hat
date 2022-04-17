@@ -126,7 +126,6 @@ pub enum Expr {
 impl Expr {
     fn parse(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Self, SyntaxError> {
         let tok = l.next();
-        println!("{:?}", tok);
         match tok.kind {
             TokenKind::Word => {
                 todo!(

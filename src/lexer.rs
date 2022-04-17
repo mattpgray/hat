@@ -107,13 +107,11 @@ impl<Chars: Iterator<Item = char>> Lexer<Chars> {
                 self.peeked.insert(t)
             }
         };
-        println!("peek {:?}", tok);
         tok
     }
 
     pub fn next(&mut self) -> Token {
         let tok = self.peeked.take().unwrap_or_else(|| self.read_token());
-        println!("next {:?}", tok);
         tok
     }
 

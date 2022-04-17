@@ -1,0 +1,118 @@
+use super::ast::*;
+use std::fmt;
+
+pub enum ExecutionError {
+    NoMainProc,
+    InvalidExpressionResult {
+        want: usize,
+        got: usize,
+    },
+    InvalidArgs {
+        name: String,
+        want: usize,
+        got: usize,
+    },
+}
+
+impl fmt::Display for ExecutionError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ExecutionError::NoMainProc => write!(f, "no main procedure"),
+            ExecutionError::InvalidArgs { name, want, got } => {
+                write!(
+                    f,
+                    "invalid number of arguments for {}: want {}, got {}",
+                    name, want, got
+                )
+            }
+            ExecutionError::InvalidExpressionResult { want, got } => {
+                write!(f, "invalid expression result: want {}, got {}", want, got)
+            }
+        }
+    }
+}
+
+struct ExprResult {
+    results: Vec<u64>,
+}
+
+#[derive(Default)]
+pub struct Context {}
+
+impl Context {
+    pub fn run(&mut self, ast: AST) -> Result<(), ExecutionError> {
+        let main = match ast.procs.get("main") {
+            Some(proc) => proc,
+            None => return Err(ExecutionError::NoMainProc),
+        };
+        self.run_proc(main)
+    }
+
+    fn run_proc(&mut self, proc: &Proc) -> Result<(), ExecutionError> {
+        self.run_stmts(&proc.body)
+    }
+
+    fn run_stmts(&mut self, stmts: &Vec<Stmt>) -> Result<(), ExecutionError> {
+        for stmt in stmts {
+            self.run_stmt(&stmt)?;
+        }
+        Ok(())
+    }
+
+    fn run_stmt(&mut self, stmt: &Stmt) -> Result<(), ExecutionError> {
+        match stmt {
+            Stmt::Expr(expr) => {
+                self.run_expr(expr)?;
+                Ok(())
+            }
+        }
+    }
+
+    fn run_expr(&mut self, expr: &Expr) -> Result<ExprResult, ExecutionError> {
+        match expr {
+            Expr::IntLiteral(u) => Ok(ExprResult { results: vec![*u] }),
+            Expr::IntrinsicCall(name, args) => self.run_intrinsic(name, args),
+        }
+    }
+
+    fn run_intrinsic(
+        &mut self,
+        name: &str,
+        args: &Vec<Expr>,
+    ) -> Result<ExprResult, ExecutionError> {
+        match name {
+            "print" => {
+                if args.len() != 1 {
+                    return Err(ExecutionError::InvalidArgs {
+                        name: format!("#{}", name),
+                        want: 1,
+                        got: args.len(),
+                    });
+                }
+                let evaluated_args = self.run_args(args)?;
+                assert_eq!(evaluated_args.len(), 1);
+
+                println!("{}", evaluated_args[0]);
+                Ok(ExprResult {
+                    results: Vec::new(),
+                })
+            }
+            _ => Err(ExecutionError::NoMainProc),
+        }
+    }
+
+    fn run_args(&mut self, args: &Vec<Expr>) -> Result<Vec<u64>, ExecutionError> {
+        let mut results = Vec::new();
+        for arg in args {
+            let arg_result = self.run_expr(arg)?;
+            if arg_result.results.len() != 1 {
+                return Err(ExecutionError::InvalidExpressionResult {
+                    want: 1,
+                    got: arg_result.results.len(),
+                });
+            }
+            results.extend(arg_result.results);
+        }
+        Ok(results)
+    }
+}
