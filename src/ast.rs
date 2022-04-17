@@ -78,7 +78,7 @@ pub enum Stmt {
     If {
         cond: Expr,
         then: Vec<Stmt>,
-        else_: Vec<Stmt>,
+        else_: Option<Box<Stmt>>,
     },
     Block(Vec<Stmt>),
 }
@@ -131,17 +131,23 @@ impl Stmt {
         match tok.kind {
             TokenKind::Else => {
                 l.next();
-                let else_ = Self::parse_block(l)?;
-                Ok(Stmt::If {
-                    cond,
-                    then: then,
-                    else_: else_,
-                })
+                let tok = l.peek();
+                match tok.kind {
+                    TokenKind::If => {
+                        let else_ = Some(Box::new(Stmt::parse_if(l)?));
+                        Ok(Stmt::If { cond, then, else_ })
+                    }
+                    _ => {
+                        let block = Box::new(Stmt::Block(Self::parse_block(l)?));
+                        let else_ = Some(block);
+                        Ok(Stmt::If { cond, then, else_ })
+                    }
+                }
             }
             _ => Ok(Stmt::If {
                 cond,
                 then: then,
-                else_: Vec::new(),
+                else_: None,
             }),
         }
     }

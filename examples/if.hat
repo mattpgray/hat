@@ -9,4 +9,35 @@ proc main() {
     } else {
         #print(32);
     }
+    if 0 {
+        #print(40);
+    }
+    if 1 {
+        #print(50);
+    }
+    if 0 {
+        #print(60);
+    } else if 0 {
+        #print(70);
+    } else if 1 {
+        #print(80);
+    }
+    if 0 {
+        #print(61);
+    } else if 0 {
+        #print(71);
+    } else if 1 {
+        #print(81);
+    } else {
+        #print(91);
+    }
+    if 0 {
+        #print(62);
+    } else if 0 {
+        #print(72);
+    } else if 0 {
+        #print(82);
+    } else {
+        #print(92);
+    }
 }

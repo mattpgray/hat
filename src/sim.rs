@@ -84,14 +84,18 @@ impl Context {
         &mut self,
         cond: &Expr,
         then: &Vec<Stmt>,
-        else_: &Vec<Stmt>,
+        else_: &Option<Box<Stmt>>,
     ) -> Result<(), ExecutionError> {
         let cond_result = self.run_expr(cond)?;
         expect_expr_result(&cond_result, 1)?;
         if cond_result.results[0] != 0 {
             self.run_stmts(then)
         } else {
-            self.run_stmts(else_)
+            if let Some(else_) = else_ {
+                self.run_stmt(else_)
+            } else {
+                Ok(())
+            }
         }
     }
 
