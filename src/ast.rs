@@ -61,12 +61,6 @@ impl fmt::Display for SyntaxError {
 }
 
 #[derive(Debug)]
-pub struct Ast {
-    pub procs: HashMap<String, Proc>,
-    pub global_vars: HashMap<String, Var>,
-}
-
-#[derive(Debug)]
 pub struct Var {
     pub name: String,
     pub value: Option<u64>,
@@ -88,6 +82,7 @@ pub enum Stmt {
         else_: Option<Box<Stmt>>,
     },
     Block(Vec<Stmt>),
+    Assign(String, Expr),
 }
 
 impl Stmt {
@@ -116,11 +111,25 @@ impl Stmt {
     }
 
     fn parse(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Stmt, SyntaxError> {
-        let tok = l.peek();
+        let tok = l.peek().clone();
 
         match tok.kind {
             TokenKind::OpenCurly => Ok(Stmt::Block(Self::parse_block(l)?)),
             TokenKind::If => Self::parse_if(l),
+            TokenKind::Word => {
+                l.next();
+                let p_tok = l.peek();
+                if p_tok.kind == TokenKind::Eq {
+                    l.next();
+                    let assign = Stmt::Assign(tok.text, Expr::parse(l)?);
+                    expect_token_kind(l, TokenKind::SemiColon)?;
+                    Ok(assign)
+                } else {
+                    let expr = Expr::parse_word_expr(l, &tok)?;
+                    expect_token_kind(l, TokenKind::SemiColon)?;
+                    Ok(Stmt::Expr(expr))
+                }
+            }
             _ => {
                 let expr = Expr::parse(l)?;
                 expect_token_kind(l, TokenKind::SemiColon)?;
@@ -164,18 +173,14 @@ impl Stmt {
 pub enum Expr {
     IntLiteral(u64),
     IntrinsicCall(String, Vec<Expr>),
+    Word(String),
 }
 
 impl Expr {
     fn parse(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Self, SyntaxError> {
         let tok = l.next();
         match tok.kind {
-            TokenKind::Word => {
-                todo!(
-                    "{}: Parsing of expressions that begin with a word is not implemented yet.",
-                    tok.loc
-                )
-            }
+            TokenKind::Word => Self::parse_word_expr(l, &tok),
             TokenKind::Hash => {
                 let name = expect_token_kind(l, TokenKind::Word)?.text;
                 expect_token_kind(l, TokenKind::OpenParen)?;
@@ -232,6 +237,23 @@ impl Expr {
         }
     }
 
+    fn parse_word_expr(
+        _l: &mut Lexer<impl Iterator<Item = char>>,
+        word_tok: &Token,
+    ) -> Result<Self, SyntaxError> {
+        assert!(word_tok.kind == TokenKind::Word, "Expected word token");
+        let tok = _l.peek();
+        match tok.kind {
+            TokenKind::OpenParen => {
+                todo!(
+                    "{}: Parsing of function calls is not implented yet",
+                    word_tok.loc
+                )
+            }
+            _ => Ok(Expr::Word(word_tok.text.clone())),
+        }
+    }
+
     fn parse_int_literal(text: String) -> u64 {
         let mut chars = text.chars();
         let mut int_val = chars.next().unwrap() as u64 - '0' as u64;
@@ -240,6 +262,12 @@ impl Expr {
         }
         int_val
     }
+}
+
+#[derive(Debug)]
+pub struct Ast {
+    pub procs: HashMap<String, Proc>,
+    pub global_vars: HashMap<String, Var>,
 }
 
 impl Ast {
@@ -297,7 +325,9 @@ impl Ast {
         match tok.kind {
             TokenKind::Eq => {
                 // TODO: Allow arbitrary expressions.
-                match Expr::parse(l)? {
+                let expr = Expr::parse(l)?;
+                expect_token_kind(l, TokenKind::SemiColon)?;
+                match expr {
                     Expr::IntLiteral(int_val) => Ok(Var {
                         name,
                         value: Some(int_val),

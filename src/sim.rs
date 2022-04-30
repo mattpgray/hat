@@ -12,6 +12,7 @@ pub enum ExecutionError {
         want: usize,
         got: usize,
     },
+    UknownValue(String),
 }
 
 impl fmt::Display for ExecutionError {
@@ -28,6 +29,7 @@ impl fmt::Display for ExecutionError {
             ExecutionError::InvalidExpressionResult { want, got } => {
                 write!(f, "invalid expression result: want {}, got {}", want, got)
             }
+            ExecutionError::UknownValue(word) => write!(f, "unknown value: '{}'", word),
         }
     }
 }
@@ -83,6 +85,7 @@ impl Context {
             }
             Stmt::Block(block) => self.run_stmts(block),
             Stmt::If { cond, then, else_ } => self.run_if(cond, then, else_),
+            Stmt::Assign(name, expr) => self.run_assign(name, expr),
         }
     }
 
@@ -103,10 +106,24 @@ impl Context {
         }
     }
 
+    fn run_assign(&mut self, name: &String, expr: &Expr) -> Result<(), ExecutionError> {
+        let result = self.run_expr(expr)?;
+        expect_expr_result(&result, 1)?;
+        self.global_vars.insert(name.clone(), result.results[0]);
+        Ok(())
+    }
+
     fn run_expr(&mut self, expr: &Expr) -> Result<ExprResult, ExecutionError> {
         match expr {
             Expr::IntLiteral(u) => Ok(ExprResult { results: vec![*u] }),
             Expr::IntrinsicCall(name, args) => self.run_intrinsic(name, args),
+            Expr::Word(word) => {
+                let v = self
+                    .global_vars
+                    .get(word)
+                    .ok_or(ExecutionError::UknownValue(word.clone()))?;
+                Ok(ExprResult { results: vec![*v] })
+            }
         }
     }
 

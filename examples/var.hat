@@ -1,0 +1,16 @@
+var test = 1;
+var test2;
+
+proc main() {
+    #print(test);
+    #print(test2);
+    test2 = 3;
+    #print(test2);
+    if test {
+        #print(101);
+    }
+    test = 0;
+    if test {
+        #print(202);
+    }
+}
