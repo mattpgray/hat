@@ -63,6 +63,13 @@ impl fmt::Display for SyntaxError {
 #[derive(Debug)]
 pub struct Ast {
     pub procs: HashMap<String, Proc>,
+    pub global_vars: HashMap<String, Var>,
+}
+
+#[derive(Debug)]
+pub struct Var {
+    pub name: String,
+    pub value: Option<u64>,
 }
 
 #[derive(Debug)]
@@ -215,6 +222,8 @@ impl Expr {
             | TokenKind::Proc
             | TokenKind::If
             | TokenKind::Else
+            | TokenKind::Var
+            | TokenKind::Eq
             | TokenKind::Comma => Err(SyntaxError::UnexpectedToken {
                 loc: tok.loc,
                 found: tok.kind,
@@ -237,15 +246,26 @@ impl Ast {
     pub fn parse(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Self, SyntaxError> {
         let mut ast = Ast {
             procs: HashMap::new(),
+            global_vars: HashMap::new(),
         };
         loop {
             let tok = l.peek();
             match tok.kind {
                 TokenKind::EndOfFile => break,
-                _ => {
-                    peek_expect_token_kind(l, TokenKind::Proc)?;
+                TokenKind::Proc => {
                     let proc = Self::parse_proc(l)?;
                     ast.procs.insert(proc.name.clone(), proc);
+                }
+                TokenKind::Var => {
+                    let var = Self::parse_var(l)?;
+                    ast.global_vars.insert(var.name.clone(), var);
+                }
+                _ => {
+                    return Err(SyntaxError::UnexpectedToken {
+                        loc: tok.loc.clone(),
+                        found: tok.kind.clone(),
+                        want: vec![TokenKind::Proc, TokenKind::Var, TokenKind::EndOfFile],
+                    })
                 }
             }
         }
@@ -267,6 +287,33 @@ impl Ast {
             name,
             body: Stmt::parse_block(l)?,
         })
+    }
+
+    fn parse_var(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Var, SyntaxError> {
+        expect_token_kind(l, TokenKind::Var)?;
+        let name = expect_token_kind(l, TokenKind::Word)?.text;
+
+        let tok = l.next();
+        match tok.kind {
+            TokenKind::Eq => {
+                // TODO: Allow arbitrary expressions.
+                match Expr::parse(l)? {
+                    Expr::IntLiteral(int_val) => Ok(Var {
+                        name,
+                        value: Some(int_val),
+                    }),
+                    _ => todo!(
+                        "Parsing of expressions for variable declarations is not supported yet."
+                    ),
+                }
+            }
+            TokenKind::SemiColon => Ok(Var { name, value: None }),
+            _ => Err(SyntaxError::UnexpectedToken {
+                loc: tok.loc,
+                found: tok.kind,
+                want: vec![TokenKind::Eq, TokenKind::SemiColon],
+            }),
+        }
     }
 }
 

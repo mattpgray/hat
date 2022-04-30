@@ -1,5 +1,5 @@
 use super::ast::*;
-use std::fmt;
+use std::{collections::HashMap, fmt};
 
 pub enum ExecutionError {
     NoMainProc,
@@ -47,10 +47,16 @@ fn expect_expr_result(result: &ExprResult, want: usize) -> Result<(), ExecutionE
 }
 
 #[derive(Default)]
-pub struct Context {}
+pub struct Context {
+    global_vars: HashMap<String, u64>,
+}
 
 impl Context {
     pub fn run(&mut self, ast: Ast) -> Result<(), ExecutionError> {
+        for (_, val) in ast.global_vars.iter() {
+            self.global_vars
+                .insert(val.name.clone(), val.value.unwrap_or(0));
+        }
         let main = match ast.procs.get("main") {
             Some(proc) => proc,
             None => return Err(ExecutionError::NoMainProc),

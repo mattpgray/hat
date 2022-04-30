@@ -24,6 +24,7 @@ pub enum TokenKind {
     SemiColon,
     Hash,
     Comma,
+    Eq,
 
     // Literals
     IntLiteral,
@@ -33,6 +34,7 @@ pub enum TokenKind {
     Proc,
     If,
     Else,
+    Var,
 
     // Terminators
     Invalid,
@@ -49,10 +51,12 @@ impl fmt::Display for TokenKind {
             TokenKind::SemiColon => write!(f, ";"),
             TokenKind::Comma => write!(f, ","),
             TokenKind::Hash => write!(f, "#"),
+            TokenKind::Eq => write!(f, "="),
             TokenKind::IntLiteral => write!(f, "int literal"),
             TokenKind::Word => write!(f, "word"),
             TokenKind::Proc => write!(f, "proc"),
             TokenKind::If => write!(f, "if"),
+            TokenKind::Var => write!(f, "var"),
             TokenKind::Else => write!(f, "else"),
             TokenKind::Invalid => write!(f, "invalid"),
             TokenKind::EndOfFile => write!(f, "EOF"),
@@ -66,6 +70,7 @@ impl TokenKind {
             "proc" => Some(TokenKind::Proc),
             "if" => Some(TokenKind::If),
             "else" => Some(TokenKind::Else),
+            "var" => Some(TokenKind::Var),
             _ => None,
         }
     }
@@ -210,6 +215,11 @@ impl<Chars: Iterator<Item = char>> Lexer<Chars> {
                     },
                     '#' => Token {
                         kind: TokenKind::Hash,
+                        loc,
+                        text: c.to_string(),
+                    },
+                    '=' => Token {
+                        kind: TokenKind::Eq,
                         loc,
                         text: c.to_string(),
                     },
