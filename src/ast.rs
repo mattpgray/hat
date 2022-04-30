@@ -63,7 +63,7 @@ impl fmt::Display for SyntaxError {
 #[derive(Debug)]
 pub struct Var {
     pub name: String,
-    pub value: Option<u64>,
+    pub value: Option<Expr>,
 }
 
 #[derive(Debug)]
@@ -379,15 +379,10 @@ impl Ast {
                 // TODO: Allow arbitrary expressions.
                 let expr = Expr::parse(l)?;
                 expect_token_kind(l, TokenKind::SemiColon)?;
-                match expr {
-                    Expr::IntLiteral(int_val) => Ok(Var {
-                        name,
-                        value: Some(int_val),
-                    }),
-                    _ => todo!(
-                        "Parsing of expressions for variable declarations is not supported yet."
-                    ),
-                }
+                Ok(Var {
+                    name,
+                    value: Some(expr),
+                })
             }
             TokenKind::SemiColon => Ok(Var { name, value: None }),
             _ => Err(SyntaxError::UnexpectedToken {

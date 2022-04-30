@@ -55,9 +55,16 @@ pub struct Context {
 
 impl Context {
     pub fn run(&mut self, ast: Ast) -> Result<(), ExecutionError> {
-        for (_, val) in ast.global_vars.iter() {
-            self.global_vars
-                .insert(val.name.clone(), val.value.unwrap_or(0));
+        for var_ in ast.global_vars.values() {
+            let res = match var_.value.as_ref() {
+                Some(val) => {
+                    let expr_res = self.run_expr(val)?;
+                    expect_expr_result(&expr_res, 1)?;
+                    expr_res.results[0]
+                }
+                None => 0,
+            };
+            self.global_vars.insert(var_.name.clone(), res);
         }
         let main = match ast.procs.get("main") {
             Some(proc) => proc,

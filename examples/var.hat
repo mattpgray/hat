@@ -1,5 +1,6 @@
 var test = 1;
 var test2;
+var test3 = 10-3;
 
 proc main() {
     #print(test);
@@ -13,4 +14,5 @@ proc main() {
     if test {
         #print(202);
     }
+    #print(test3);
 }
