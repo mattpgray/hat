@@ -86,6 +86,7 @@ impl Context {
             Stmt::Block(block) => self.run_stmts(block),
             Stmt::If { cond, then, else_ } => self.run_if(cond, then, else_),
             Stmt::Assign(name, expr) => self.run_assign(name, expr),
+            Stmt::While { cond, body } => self.run_while(cond, body),
         }
     }
 
@@ -104,6 +105,17 @@ impl Context {
         } else {
             Ok(())
         }
+    }
+
+    fn run_while(&mut self, cond: &Expr, body: &Vec<Stmt>) -> Result<(), ExecutionError> {
+        let mut cond_result = self.run_expr(cond)?;
+        expect_expr_result(&cond_result, 1)?;
+        while cond_result.results[0] != 0 {
+            self.run_stmts(body)?;
+            cond_result = self.run_expr(cond)?;
+            expect_expr_result(&cond_result, 1)?;
+        }
+        Ok(())
     }
 
     fn run_assign(&mut self, name: &String, expr: &Expr) -> Result<(), ExecutionError> {

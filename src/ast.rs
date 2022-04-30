@@ -81,6 +81,10 @@ pub enum Stmt {
         then: Vec<Stmt>,
         else_: Option<Box<Stmt>>,
     },
+    While {
+        cond: Expr,
+        body: Vec<Stmt>,
+    },
     Block(Vec<Stmt>),
     Assign(String, Expr),
 }
@@ -116,6 +120,7 @@ impl Stmt {
         match tok.kind {
             TokenKind::OpenCurly => Ok(Stmt::Block(Self::parse_block(l)?)),
             TokenKind::If => Self::parse_if(l),
+            TokenKind::While => Self::parse_while(l),
             TokenKind::Word => {
                 l.next();
                 let p_tok = l.peek();
@@ -166,6 +171,13 @@ impl Stmt {
                 else_: None,
             }),
         }
+    }
+
+    fn parse_while(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Stmt, SyntaxError> {
+        expect_token_kind(l, TokenKind::While)?;
+        let cond = Expr::parse(l)?;
+        let body = Self::parse_block(l)?;
+        Ok(Stmt::While { cond, body })
     }
 }
 
@@ -229,6 +241,7 @@ impl Expr {
             | TokenKind::Else
             | TokenKind::Var
             | TokenKind::Eq
+            | TokenKind::While
             | TokenKind::Comma => Err(SyntaxError::UnexpectedToken {
                 loc: tok.loc,
                 found: tok.kind,

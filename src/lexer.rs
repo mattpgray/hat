@@ -35,6 +35,7 @@ pub enum TokenKind {
     If,
     Else,
     Var,
+    While,
 
     // Terminators
     Invalid,
@@ -58,6 +59,7 @@ impl fmt::Display for TokenKind {
             TokenKind::If => write!(f, "if"),
             TokenKind::Var => write!(f, "var"),
             TokenKind::Else => write!(f, "else"),
+            TokenKind::While => write!(f, "while"),
             TokenKind::Invalid => write!(f, "invalid"),
             TokenKind::EndOfFile => write!(f, "EOF"),
         }
@@ -71,6 +73,7 @@ impl TokenKind {
             "if" => Some(TokenKind::If),
             "else" => Some(TokenKind::Else),
             "var" => Some(TokenKind::Var),
+            "while" => Some(TokenKind::While),
             _ => None,
         }
     }
