@@ -50,7 +50,7 @@ fn expect_expr_result(result: &ExprResult, want: usize) -> Result<(), ExecutionE
 pub struct Context {}
 
 impl Context {
-    pub fn run(&mut self, ast: AST) -> Result<(), ExecutionError> {
+    pub fn run(&mut self, ast: Ast) -> Result<(), ExecutionError> {
         let main = match ast.procs.get("main") {
             Some(proc) => proc,
             None => return Err(ExecutionError::NoMainProc),
@@ -64,7 +64,7 @@ impl Context {
 
     fn run_stmts(&mut self, stmts: &Vec<Stmt>) -> Result<(), ExecutionError> {
         for stmt in stmts {
-            self.run_stmt(&stmt)?;
+            self.run_stmt(stmt)?;
         }
         Ok(())
     }
@@ -75,7 +75,7 @@ impl Context {
                 self.run_expr(expr)?;
                 Ok(())
             }
-            Stmt::Block(block) => self.run_stmts(&block),
+            Stmt::Block(block) => self.run_stmts(block),
             Stmt::If { cond, then, else_ } => self.run_if(cond, then, else_),
         }
     }
@@ -90,12 +90,10 @@ impl Context {
         expect_expr_result(&cond_result, 1)?;
         if cond_result.results[0] != 0 {
             self.run_stmts(then)
+        } else if let Some(else_) = else_ {
+            self.run_stmt(else_)
         } else {
-            if let Some(else_) = else_ {
-                self.run_stmt(else_)
-            } else {
-                Ok(())
-            }
+            Ok(())
         }
     }
 

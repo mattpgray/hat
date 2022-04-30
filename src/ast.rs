@@ -38,13 +38,13 @@ impl fmt::Display for SyntaxError {
                 found,
                 want,
             } => {
-                assert!(want.len() > 0);
+                assert!(!want.is_empty());
 
                 let mut s = String::new();
                 s.push_str(&format!("{}", want[0]));
                 if want.len() > 1 {
-                    for i in 1..want.len() - 1 {
-                        s.push_str(&format!(", {}", want[i]));
+                    for w in want.iter().take(want.len() - 1).skip(1) {
+                        s.push_str(&format!(", {}", w));
                     }
                     s.push_str(&format!(" or {}", want[want.len() - 1]));
                 }
@@ -61,7 +61,7 @@ impl fmt::Display for SyntaxError {
 }
 
 #[derive(Debug)]
-pub struct AST {
+pub struct Ast {
     pub procs: HashMap<String, Proc>,
 }
 
@@ -94,7 +94,7 @@ impl Stmt {
                     l.next();
                     break;
                 }
-                TokenKind::EOF => {
+                TokenKind::EndOfFile => {
                     return Err(SyntaxError::UnmatchedBracket(
                         tok.loc.clone(),
                         TokenKind::OpenCurly,
@@ -146,7 +146,7 @@ impl Stmt {
             }
             _ => Ok(Stmt::If {
                 cond,
-                then: then,
+                then,
                 else_: None,
             }),
         }
@@ -205,7 +205,7 @@ impl Expr {
                 Ok(Expr::IntrinsicCall(name, args))
             }
             TokenKind::IntLiteral => Ok(Expr::IntLiteral(Self::parse_int_literal(tok.text))),
-            TokenKind::EOF
+            TokenKind::EndOfFile
             | TokenKind::Invalid
             | TokenKind::OpenCurly
             | TokenKind::CloseCurly
@@ -215,35 +215,33 @@ impl Expr {
             | TokenKind::Proc
             | TokenKind::If
             | TokenKind::Else
-            | TokenKind::Comma => {
-                return Err(SyntaxError::UnexpectedToken {
-                    loc: tok.loc,
-                    found: tok.kind,
-                    want: vec![TokenKind::Word, TokenKind::Hash, TokenKind::IntLiteral],
-                })
-            }
+            | TokenKind::Comma => Err(SyntaxError::UnexpectedToken {
+                loc: tok.loc,
+                found: tok.kind,
+                want: vec![TokenKind::Word, TokenKind::Hash, TokenKind::IntLiteral],
+            }),
         }
     }
 
     fn parse_int_literal(text: String) -> u64 {
         let mut chars = text.chars();
         let mut int_val = chars.next().unwrap() as u64 - '0' as u64;
-        while let Some(c) = chars.next() {
+        for c in chars {
             int_val = int_val * 10 + (c as u64 - '0' as u64);
         }
         int_val
     }
 }
 
-impl AST {
+impl Ast {
     pub fn parse(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Self, SyntaxError> {
-        let mut ast = AST {
+        let mut ast = Ast {
             procs: HashMap::new(),
         };
         loop {
             let tok = l.peek();
             match tok.kind {
-                TokenKind::EOF => break,
+                TokenKind::EndOfFile => break,
                 _ => {
                     peek_expect_token_kind(l, TokenKind::Proc)?;
                     let proc = Self::parse_proc(l)?;
@@ -292,7 +290,7 @@ fn peek_expect_token_kind(
 
 fn token_expected_kind(tok: &Token, kind: TokenKind) -> Result<(), SyntaxError> {
     match tok.kind.clone() {
-        TokenKind::EOF => Err(SyntaxError::UnexectedEOF(tok.loc.clone())),
+        TokenKind::EndOfFile => Err(SyntaxError::UnexectedEOF(tok.loc.clone())),
         TokenKind::Invalid => Err(SyntaxError::InvalidToken(tok.loc.clone(), tok.text.clone())),
         _ => {
             if kind != tok.kind {

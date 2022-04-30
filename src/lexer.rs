@@ -36,7 +36,7 @@ pub enum TokenKind {
 
     // Terminators
     Invalid,
-    EOF,
+    EndOfFile,
 }
 
 impl fmt::Display for TokenKind {
@@ -55,7 +55,7 @@ impl fmt::Display for TokenKind {
             TokenKind::If => write!(f, "if"),
             TokenKind::Else => write!(f, "else"),
             TokenKind::Invalid => write!(f, "invalid"),
-            TokenKind::EOF => write!(f, "EOF"),
+            TokenKind::EndOfFile => write!(f, "EOF"),
         }
     }
 }
@@ -117,8 +117,7 @@ impl<Chars: Iterator<Item = char>> Lexer<Chars> {
     }
 
     pub fn next(&mut self) -> Token {
-        let tok = self.peeked.take().unwrap_or_else(|| self.read_token());
-        tok
+        self.peeked.take().unwrap_or_else(|| self.read_token())
     }
 
     fn trim_whitespace(&mut self) {
@@ -138,7 +137,7 @@ impl<Chars: Iterator<Item = char>> Lexer<Chars> {
     }
 
     fn drop_line(&mut self) {
-        while let Some(c) = self.chars.next() {
+        for c in self.chars.by_ref() {
             match c {
                 '\n' => {
                     self.lnum += 1;
@@ -152,7 +151,7 @@ impl<Chars: Iterator<Item = char>> Lexer<Chars> {
 
     // remove all whitespace and comments
     fn next_valid_char_and_loc(&mut self) -> Option<(char, Loc)> {
-        while let Some(_) = self.chars.peek() {
+        while self.chars.peek().is_some() {
             self.trim_whitespace();
             let loc = self.loc();
             match self.chars.next() {
@@ -170,7 +169,7 @@ impl<Chars: Iterator<Item = char>> Lexer<Chars> {
             }
         }
 
-        return None;
+        None
     }
 
     fn read_token(&mut self) -> Token {
@@ -248,7 +247,7 @@ impl<Chars: Iterator<Item = char>> Lexer<Chars> {
                         }
                         match TokenKind::from_keyword(&word) {
                             Some(kind) => Token {
-                                kind: kind,
+                                kind,
                                 loc,
                                 text: word,
                             },
@@ -267,7 +266,7 @@ impl<Chars: Iterator<Item = char>> Lexer<Chars> {
                 }
             }
             None => Token {
-                kind: TokenKind::EOF,
+                kind: TokenKind::EndOfFile,
                 loc: self.loc(),
                 text: String::new(),
             },

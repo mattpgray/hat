@@ -20,7 +20,7 @@ fn usage() {
 }
 
 fn get_file_path_and_data(args: &mut Vec<String>) -> (String, String) {
-    if args.len() == 0 {
+    if args.is_empty() {
         eprintln!("No file provided");
         usage();
         process::exit(1);
@@ -58,7 +58,7 @@ impl fmt::Display for SimulationError {
 fn simulate_program(
     lexer: &mut lexer::Lexer<impl Iterator<Item = char>>,
 ) -> Result<(), SimulationError> {
-    let ast = ast::AST::parse(lexer)?;
+    let ast = ast::Ast::parse(lexer)?;
     let mut ctx = sim::Context::default();
     ctx.run(ast)?;
     Ok(())
@@ -67,7 +67,7 @@ fn simulate_program(
 fn main() {
     let mut args: Vec<String> = env::args().collect();
     args.remove(0);
-    if args.len() == 0 {
+    if args.is_empty() {
         eprintln!("No subcommand provided");
         usage();
         process::exit(1);
@@ -77,7 +77,7 @@ fn main() {
         "ast" => {
             let (file_path, file_data) = get_file_path_and_data(&mut args);
             let mut l = lexer::Lexer::new(file_data.chars(), file_path);
-            match ast::AST::parse(&mut l) {
+            match ast::Ast::parse(&mut l) {
                 Err(err) => {
                     eprintln!("{}: syntax error: {}", err.loc(), err)
                 }
@@ -89,11 +89,9 @@ fn main() {
         "sim" => {
             let (file_path, file_data) = get_file_path_and_data(&mut args);
             let mut l = lexer::Lexer::new(file_data.chars(), file_path);
-            match simulate_program(&mut l) {
-                Err(err) => {
-                    eprintln!("{}", err);
-                }
-                Ok(()) => {}
+            if let Err(err) = simulate_program(&mut l) {
+                eprintln!("{}", err);
+                exit(1);
             }
         }
         "lex" => {
@@ -102,7 +100,7 @@ fn main() {
             loop {
                 let tok = l.next();
                 match tok.kind {
-                    lexer::TokenKind::EOF => break,
+                    lexer::TokenKind::EndOfFile => break,
                     lexer::TokenKind::Invalid => {
                         eprintln!("{}: invalid token: {}", tok.loc, tok.text);
                         exit(1);
