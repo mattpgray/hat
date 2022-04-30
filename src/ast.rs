@@ -1,5 +1,4 @@
 use super::lexer::*;
-use std::collections::HashMap;
 use std::fmt;
 
 #[derive(Debug)]
@@ -66,14 +65,14 @@ pub struct Var {
     pub value: Option<Expr>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Proc {
     pub name: String,
     // TODO: Args are not accepted.
     pub body: Vec<Stmt>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Stmt {
     Expr(Expr),
     If {
@@ -181,12 +180,12 @@ impl Stmt {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Op {
     Sub,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expr {
     IntLiteral(u64),
     IntrinsicCall(String, Vec<Expr>),
@@ -317,28 +316,30 @@ impl Expr {
 }
 
 #[derive(Debug)]
+pub enum Decl {
+    Var(Var),
+    Proc(Proc),
+}
+
+#[derive(Debug)]
 pub struct Ast {
-    pub procs: HashMap<String, Proc>,
-    pub global_vars: HashMap<String, Var>,
+    pub decls: Vec<Decl>,
 }
 
 impl Ast {
     pub fn parse(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Self, SyntaxError> {
-        let mut ast = Ast {
-            procs: HashMap::new(),
-            global_vars: HashMap::new(),
-        };
+        let mut ast = Ast { decls: Vec::new() };
         loop {
             let tok = l.peek();
             match tok.kind {
                 TokenKind::EndOfFile => break,
                 TokenKind::Proc => {
                     let proc = Self::parse_proc(l)?;
-                    ast.procs.insert(proc.name.clone(), proc);
+                    ast.decls.push(Decl::Proc(proc));
                 }
                 TokenKind::Var => {
                     let var = Self::parse_var(l)?;
-                    ast.global_vars.insert(var.name.clone(), var);
+                    ast.decls.push(Decl::Var(var));
                 }
                 _ => {
                     return Err(SyntaxError::UnexpectedToken {

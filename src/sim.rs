@@ -51,26 +51,36 @@ fn expect_expr_result(result: &ExprResult, want: usize) -> Result<(), ExecutionE
 #[derive(Default)]
 pub struct Context {
     global_vars: HashMap<String, u64>,
+    global_procs: Box<HashMap<String, Proc>>,
 }
 
 impl Context {
     pub fn run(&mut self, ast: Ast) -> Result<(), ExecutionError> {
-        for var_ in ast.global_vars.values() {
-            let res = match var_.value.as_ref() {
-                Some(val) => {
-                    let expr_res = self.run_expr(val)?;
-                    expect_expr_result(&expr_res, 1)?;
-                    expr_res.results[0]
+        for decl in ast.decls.iter() {
+            match decl {
+                Decl::Proc(proc) => {
+                    self.global_procs.insert(proc.name.clone(), proc.clone());
                 }
-                None => 0,
-            };
-            self.global_vars.insert(var_.name.clone(), res);
+                Decl::Var(var) => {
+                    let res = match var.value.as_ref() {
+                        Some(val) => {
+                            let expr_res = self.run_expr(val)?;
+                            expect_expr_result(&expr_res, 1)?;
+                            expr_res.results[0]
+                        }
+                        None => 0,
+                    };
+                    self.global_vars.insert(var.name.clone(), res);
+                }
+            }
         }
-        let main = match ast.procs.get("main") {
-            Some(proc) => proc,
-            None => return Err(ExecutionError::NoMainProc),
-        };
-        self.run_proc(main)
+        // Get the main proc and then run the program from the main proc
+        let main_proc = self
+            .global_procs
+            .get("main")
+            .ok_or(ExecutionError::NoMainProc)?
+            .clone();
+        self.run_proc(&main_proc)
     }
 
     fn run_proc(&mut self, proc: &Proc) -> Result<(), ExecutionError> {
