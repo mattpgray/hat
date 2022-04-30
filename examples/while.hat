@@ -3,6 +3,6 @@ var cond = 4;
 proc main() {
     while cond {
         #print(cond);
-        cond = 0;
+        cond = cond - 1;
     }
 }

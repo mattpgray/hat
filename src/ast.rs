@@ -182,14 +182,40 @@ impl Stmt {
 }
 
 #[derive(Debug)]
+pub enum Op {
+    Sub,
+}
+
+#[derive(Debug)]
 pub enum Expr {
     IntLiteral(u64),
     IntrinsicCall(String, Vec<Expr>),
     Word(String),
+    Op {
+        left: Box<Expr>,
+        right: Box<Expr>,
+        op: Op,
+    },
 }
 
 impl Expr {
     fn parse(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Self, SyntaxError> {
+        let expr = Self::parse_one(l)?;
+        let tok = l.peek();
+        match tok.kind {
+            TokenKind::Minus => {
+                l.next();
+                let right = Expr::parse(l)?;
+                Ok(Expr::Op {
+                    left: Box::new(expr),
+                    right: Box::new(right),
+                    op: Op::Sub,
+                })
+            }
+            _ => Ok(expr),
+        }
+    }
+    fn parse_one(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Self, SyntaxError> {
         let tok = l.next();
         match tok.kind {
             TokenKind::Word => Self::parse_word_expr(l, &tok),
@@ -228,6 +254,14 @@ impl Expr {
                 }
                 Ok(Expr::IntrinsicCall(name, args))
             }
+            TokenKind::Minus => {
+                let expr = Expr::parse(l)?;
+                Ok(Expr::Op {
+                    left: Box::new(Expr::IntLiteral(0)),
+                    right: Box::new(expr),
+                    op: Op::Sub,
+                })
+            }
             TokenKind::IntLiteral => Ok(Expr::IntLiteral(Self::parse_int_literal(tok.text))),
             TokenKind::EndOfFile
             | TokenKind::Invalid
@@ -245,7 +279,12 @@ impl Expr {
             | TokenKind::Comma => Err(SyntaxError::UnexpectedToken {
                 loc: tok.loc,
                 found: tok.kind,
-                want: vec![TokenKind::Word, TokenKind::Hash, TokenKind::IntLiteral],
+                want: vec![
+                    TokenKind::Word,
+                    TokenKind::Minus,
+                    TokenKind::Hash,
+                    TokenKind::IntLiteral,
+                ],
             }),
         }
     }

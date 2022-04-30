@@ -136,7 +136,20 @@ impl Context {
                     .ok_or(ExecutionError::UknownValue(word.clone()))?;
                 Ok(ExprResult { results: vec![*v] })
             }
+            Expr::Op { left, right, op } => self.run_op(left, right, op),
         }
+    }
+
+    fn run_op(&mut self, left: &Expr, right: &Expr, op: &Op) -> Result<ExprResult, ExecutionError> {
+        let left_result = self.run_expr(left)?;
+        let right_result = self.run_expr(right)?;
+        expect_expr_result(&left_result, 1)?;
+        expect_expr_result(&right_result, 1)?;
+        let mut results = vec![];
+        match op {
+            Op::Sub => results.push(left_result.results[0] - right_result.results[0]),
+        }
+        Ok(ExprResult { results })
     }
 
     fn run_intrinsic(
