@@ -1,4 +1,6 @@
 proc main() {
     #print(2-1); // 1
     #print(1+2); // 3
+    #print(1*2); // 2
+    #print(2 * 1 + 1); // 4. Not 3 as we do not do BODMAS. Expression is grouped as (1 * (1+2))
 }

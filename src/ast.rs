@@ -184,6 +184,7 @@ impl Stmt {
 pub enum Op {
     Sub,
     Add,
+    Mul,
 }
 
 #[derive(Debug, Clone)]
@@ -221,7 +222,32 @@ impl Expr {
                     op: Op::Add,
                 })
             }
-            _ => Ok(expr),
+            TokenKind::Mul => {
+                l.next();
+                let right = Expr::parse(l)?;
+                Ok(Expr::Op {
+                    left: Box::new(expr),
+                    right: Box::new(right),
+                    op: Op::Mul,
+                })
+            }
+            TokenKind::OpenCurly
+            | TokenKind::CloseCurly
+            | TokenKind::OpenParen
+            | TokenKind::CloseParen
+            | TokenKind::SemiColon
+            | TokenKind::Hash
+            | TokenKind::Comma
+            | TokenKind::Eq
+            | TokenKind::IntLiteral
+            | TokenKind::Word
+            | TokenKind::Proc
+            | TokenKind::If
+            | TokenKind::Else
+            | TokenKind::Var
+            | TokenKind::While
+            | TokenKind::Invalid
+            | TokenKind::EndOfFile => Ok(expr),
         }
     }
     fn parse_one(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Self, SyntaxError> {
@@ -286,6 +312,7 @@ impl Expr {
             | TokenKind::Eq
             | TokenKind::While
             | TokenKind::Add
+            | TokenKind::Mul
             | TokenKind::Comma => Err(SyntaxError::UnexpectedToken {
                 loc: tok.loc,
                 found: tok.kind,

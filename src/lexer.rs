@@ -24,9 +24,12 @@ pub enum TokenKind {
     SemiColon,
     Hash,
     Comma,
+
+    // Operators
     Eq,
     Minus,
     Add,
+    Mul,
 
     // Literals
     IntLiteral,
@@ -57,6 +60,7 @@ impl fmt::Display for TokenKind {
             TokenKind::Eq => write!(f, "="),
             TokenKind::Minus => write!(f, "-"),
             TokenKind::Add => write!(f, "+"),
+            TokenKind::Mul => write!(f, "*"),
             TokenKind::IntLiteral => write!(f, "int literal"),
             TokenKind::Word => write!(f, "word"),
             TokenKind::Proc => write!(f, "proc"),
@@ -237,6 +241,11 @@ impl<Chars: Iterator<Item = char>> Lexer<Chars> {
                     },
                     '+' => Token {
                         kind: TokenKind::Add,
+                        loc,
+                        text: c.to_string(),
+                    },
+                    '*' => Token {
+                        kind: TokenKind::Mul,
                         loc,
                         text: c.to_string(),
                     },
