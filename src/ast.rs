@@ -190,6 +190,16 @@ pub enum Op {
     Lt,
 }
 
+impl Op {
+    fn precedence(&self) -> u8 {
+        match self {
+            Op::Sub | Op::Add => 1,
+            Op::Mul | Op::Div => 2,
+            Op::Gt | Op::Lt => 3,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Expr {
     IntLiteral(u64),
@@ -200,6 +210,8 @@ pub enum Expr {
         right: Box<Expr>,
         op: Op,
     },
+    // Need an explicit bracket expr to be able to differentiate (1+2) * 3 from 1 + 2 * 3.
+    BracketExpr(Box<Expr>),
 }
 
 impl Expr {
@@ -302,7 +314,7 @@ impl Expr {
             TokenKind::OpenParen => {
                 let expr = Expr::parse(l)?;
                 expect_token_kind(l, TokenKind::CloseParen)?;
-                Ok(expr)
+                Ok(Expr::BracketExpr(Box::new(expr)))
             }
             TokenKind::EndOfFile
             | TokenKind::Invalid
@@ -340,11 +352,40 @@ impl Expr {
         op: Op,
     ) -> Result<Expr, SyntaxError> {
         let right = Expr::parse(l)?;
-        Ok(Expr::Op {
-            left: Box::new(left),
-            right: Box::new(right),
-            op,
-        })
+        if let Expr::Op { .. } = left {
+            todo!("parse_op: case where left is an op is not supported yet. Can this even happen?");
+        }
+
+        if let Expr::Op {
+            op: op_right,
+            left: left2,
+            right: right2,
+        } = right.clone()
+        {
+            if op_right.precedence() >= op.precedence() {
+                Ok(Expr::Op {
+                    left: Box::new(left),
+                    right: Box::new(right),
+                    op,
+                })
+            } else {
+                Ok(Expr::Op {
+                    left: Box::new(Expr::Op {
+                        left: Box::new(left),
+                        right: left2,
+                        op,
+                    }),
+                    right: right2,
+                    op: op_right,
+                })
+            }
+        } else {
+            Ok(Expr::Op {
+                left: Box::new(left),
+                right: Box::new(right),
+                op,
+            })
+        }
     }
 
     fn parse_word_expr(
@@ -356,7 +397,7 @@ impl Expr {
         match tok.kind {
             TokenKind::OpenParen => {
                 todo!(
-                    "{}: Parsing of function calls is not implented yet",
+                    "{}: Parsing of function calls is not implemented yet",
                     word_tok.loc
                 )
             }

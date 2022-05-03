@@ -154,6 +154,7 @@ impl Context {
                 Ok(ExprResult { results: vec![*v] })
             }
             Expr::Op { left, right, op } => self.run_op(left, right, op),
+            Expr::BracketExpr(expr) => self.run_expr(expr),
         }
     }
 
