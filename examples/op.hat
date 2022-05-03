@@ -6,4 +6,10 @@ proc main() {
     #print((2 * 1) + 1); // 4. Not 3 as we do not do BODMAS. Expression is grouped as (1 * (1+2))
     #print(10 / 2); // 5
     #print(5 / 2); // 2
+    if 1 > 0 {
+        #print(10);
+    }
+    if 0 < 1 {
+        #print(11);
+    }
 }

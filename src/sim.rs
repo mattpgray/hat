@@ -168,6 +168,16 @@ impl Context {
             Op::Add => results.push(left_result.results[0] + right_result.results[0]),
             Op::Mul => results.push(left_result.results[0] * right_result.results[0]),
             Op::Div => results.push(left_result.results[0] / right_result.results[0]),
+            Op::Gt => results.push(if left_result.results[0] > right_result.results[0] {
+                1
+            } else {
+                0
+            }),
+            Op::Lt => results.push(if left_result.results[0] < right_result.results[0] {
+                1
+            } else {
+                0
+            }),
         }
         Ok(ExprResult { results })
     }

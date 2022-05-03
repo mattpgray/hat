@@ -31,6 +31,8 @@ pub enum TokenKind {
     Add,
     Mul,
     Div,
+    RAngleBracket,
+    LAngleBracket,
 
     // Literals
     IntLiteral,
@@ -63,6 +65,8 @@ impl fmt::Display for TokenKind {
             TokenKind::Add => write!(f, "+"),
             TokenKind::Mul => write!(f, "*"),
             TokenKind::Div => write!(f, "/"),
+            TokenKind::RAngleBracket => write!(f, ">"),
+            TokenKind::LAngleBracket => write!(f, "<"),
             TokenKind::IntLiteral => write!(f, "int literal"),
             TokenKind::Word => write!(f, "word"),
             TokenKind::Proc => write!(f, "proc"),
@@ -253,6 +257,16 @@ impl<Chars: Iterator<Item = char>> Lexer<Chars> {
                     },
                     '/' => Token {
                         kind: TokenKind::Div,
+                        loc,
+                        text: c.to_string(),
+                    },
+                    '>' => Token {
+                        kind: TokenKind::RAngleBracket,
+                        loc,
+                        text: c.to_string(),
+                    },
+                    '<' => Token {
+                        kind: TokenKind::LAngleBracket,
                         loc,
                         text: c.to_string(),
                     },

@@ -186,6 +186,8 @@ pub enum Op {
     Add,
     Mul,
     Div,
+    Gt,
+    Lt,
 }
 
 #[derive(Debug, Clone)]
@@ -207,39 +209,27 @@ impl Expr {
         match tok.kind {
             TokenKind::Minus => {
                 l.next();
-                let right = Expr::parse(l)?;
-                Ok(Expr::Op {
-                    left: Box::new(expr),
-                    right: Box::new(right),
-                    op: Op::Sub,
-                })
+                Self::parse_op(l, expr, Op::Sub)
             }
             TokenKind::Add => {
                 l.next();
-                let right = Expr::parse(l)?;
-                Ok(Expr::Op {
-                    left: Box::new(expr),
-                    right: Box::new(right),
-                    op: Op::Add,
-                })
+                Self::parse_op(l, expr, Op::Add)
             }
             TokenKind::Mul => {
                 l.next();
-                let right = Expr::parse(l)?;
-                Ok(Expr::Op {
-                    left: Box::new(expr),
-                    right: Box::new(right),
-                    op: Op::Mul,
-                })
+                Self::parse_op(l, expr, Op::Mul)
             }
             TokenKind::Div => {
                 l.next();
-                let right = Expr::parse(l)?;
-                Ok(Expr::Op {
-                    left: Box::new(expr),
-                    right: Box::new(right),
-                    op: Op::Div,
-                })
+                Self::parse_op(l, expr, Op::Div)
+            }
+            TokenKind::RAngleBracket => {
+                l.next();
+                Self::parse_op(l, expr, Op::Gt)
+            }
+            TokenKind::LAngleBracket => {
+                l.next();
+                Self::parse_op(l, expr, Op::Lt)
             }
             TokenKind::OpenCurly
             | TokenKind::CloseCurly
@@ -260,6 +250,7 @@ impl Expr {
             | TokenKind::EndOfFile => Ok(expr),
         }
     }
+
     fn parse_one(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Self, SyntaxError> {
         let tok = l.next();
         match tok.kind {
@@ -328,6 +319,8 @@ impl Expr {
             | TokenKind::Add
             | TokenKind::Mul
             | TokenKind::Div
+            | TokenKind::LAngleBracket
+            | TokenKind::RAngleBracket
             | TokenKind::Comma => Err(SyntaxError::UnexpectedToken {
                 loc: tok.loc,
                 found: tok.kind,
@@ -339,6 +332,19 @@ impl Expr {
                 ],
             }),
         }
+    }
+
+    fn parse_op(
+        l: &mut Lexer<impl Iterator<Item = char>>,
+        left: Expr,
+        op: Op,
+    ) -> Result<Expr, SyntaxError> {
+        let right = Expr::parse(l)?;
+        Ok(Expr::Op {
+            left: Box::new(left),
+            right: Box::new(right),
+            op,
+        })
     }
 
     fn parse_word_expr(
