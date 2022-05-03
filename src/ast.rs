@@ -183,6 +183,7 @@ impl Stmt {
 #[derive(Debug, Clone)]
 pub enum Op {
     Sub,
+    Add,
 }
 
 #[derive(Debug, Clone)]
@@ -209,6 +210,15 @@ impl Expr {
                     left: Box::new(expr),
                     right: Box::new(right),
                     op: Op::Sub,
+                })
+            }
+            TokenKind::Add => {
+                l.next();
+                let right = Expr::parse(l)?;
+                Ok(Expr::Op {
+                    left: Box::new(expr),
+                    right: Box::new(right),
+                    op: Op::Add,
                 })
             }
             _ => Ok(expr),
@@ -275,6 +285,7 @@ impl Expr {
             | TokenKind::Var
             | TokenKind::Eq
             | TokenKind::While
+            | TokenKind::Add
             | TokenKind::Comma => Err(SyntaxError::UnexpectedToken {
                 loc: tok.loc,
                 found: tok.kind,

@@ -165,6 +165,7 @@ impl Context {
         let mut results = vec![];
         match op {
             Op::Sub => results.push(left_result.results[0] - right_result.results[0]),
+            Op::Add => results.push(left_result.results[0] + right_result.results[0]),
         }
         Ok(ExprResult { results })
     }
