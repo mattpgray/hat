@@ -298,11 +298,15 @@ impl Expr {
                 })
             }
             TokenKind::IntLiteral => Ok(Expr::IntLiteral(Self::parse_int_literal(tok.text))),
+            TokenKind::OpenParen => {
+                let expr = Expr::parse(l)?;
+                expect_token_kind(l, TokenKind::CloseParen)?;
+                Ok(expr)
+            }
             TokenKind::EndOfFile
             | TokenKind::Invalid
             | TokenKind::OpenCurly
             | TokenKind::CloseCurly
-            | TokenKind::OpenParen
             | TokenKind::CloseParen
             | TokenKind::SemiColon
             | TokenKind::Proc
