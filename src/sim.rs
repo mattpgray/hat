@@ -51,7 +51,7 @@ fn expect_expr_result(result: &ExprResult, want: usize) -> Result<(), ExecutionE
 #[derive(Default)]
 pub struct Context {
     global_vars: HashMap<String, u64>,
-    global_procs: Box<HashMap<String, Proc>>,
+    global_procs: HashMap<String, Proc>,
 }
 
 impl Context {
@@ -135,10 +135,10 @@ impl Context {
         Ok(())
     }
 
-    fn run_assign(&mut self, name: &String, expr: &Expr) -> Result<(), ExecutionError> {
+    fn run_assign(&mut self, name: &str, expr: &Expr) -> Result<(), ExecutionError> {
         let result = self.run_expr(expr)?;
         expect_expr_result(&result, 1)?;
-        self.global_vars.insert(name.clone(), result.results[0]);
+        self.global_vars.insert(name.to_owned(), result.results[0]);
         Ok(())
     }
 
@@ -150,7 +150,7 @@ impl Context {
                 let v = self
                     .global_vars
                     .get(word)
-                    .ok_or(ExecutionError::UknownValue(word.clone()))?;
+                    .ok_or_else(|| ExecutionError::UknownValue(word.clone()))?;
                 Ok(ExprResult { results: vec![*v] })
             }
             Expr::Op { left, right, op } => self.run_op(left, right, op),
