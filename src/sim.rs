@@ -167,6 +167,7 @@ impl Context {
             Op::Sub => results.push(left_result.results[0] - right_result.results[0]),
             Op::Add => results.push(left_result.results[0] + right_result.results[0]),
             Op::Mul => results.push(left_result.results[0] * right_result.results[0]),
+            Op::Div => results.push(left_result.results[0] / right_result.results[0]),
         }
         Ok(ExprResult { results })
     }

@@ -30,6 +30,7 @@ pub enum TokenKind {
     Minus,
     Add,
     Mul,
+    Div,
 
     // Literals
     IntLiteral,
@@ -61,6 +62,7 @@ impl fmt::Display for TokenKind {
             TokenKind::Minus => write!(f, "-"),
             TokenKind::Add => write!(f, "+"),
             TokenKind::Mul => write!(f, "*"),
+            TokenKind::Div => write!(f, "/"),
             TokenKind::IntLiteral => write!(f, "int literal"),
             TokenKind::Word => write!(f, "word"),
             TokenKind::Proc => write!(f, "proc"),
@@ -246,6 +248,11 @@ impl<Chars: Iterator<Item = char>> Lexer<Chars> {
                     },
                     '*' => Token {
                         kind: TokenKind::Mul,
+                        loc,
+                        text: c.to_string(),
+                    },
+                    '/' => Token {
+                        kind: TokenKind::Div,
                         loc,
                         text: c.to_string(),
                     },

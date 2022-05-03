@@ -185,6 +185,7 @@ pub enum Op {
     Sub,
     Add,
     Mul,
+    Div,
 }
 
 #[derive(Debug, Clone)]
@@ -229,6 +230,15 @@ impl Expr {
                     left: Box::new(expr),
                     right: Box::new(right),
                     op: Op::Mul,
+                })
+            }
+            TokenKind::Div => {
+                l.next();
+                let right = Expr::parse(l)?;
+                Ok(Expr::Op {
+                    left: Box::new(expr),
+                    right: Box::new(right),
+                    op: Op::Div,
                 })
             }
             TokenKind::OpenCurly
@@ -317,6 +327,7 @@ impl Expr {
             | TokenKind::While
             | TokenKind::Add
             | TokenKind::Mul
+            | TokenKind::Div
             | TokenKind::Comma => Err(SyntaxError::UnexpectedToken {
                 loc: tok.loc,
                 found: tok.kind,
