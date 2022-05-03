@@ -5,6 +5,7 @@ use std::process;
 use std::process::exit;
 
 mod ast;
+mod com;
 mod lexer;
 mod sim;
 
@@ -74,6 +75,10 @@ fn main() {
     }
     let subcommand: String = args.remove(0);
     match subcommand.as_str() {
+        "com" => {
+            let c = com::Compiler::default();
+            c.compile("./examples/func.hat").unwrap();
+        }
         "ast" => {
             let (file_path, file_data) = get_file_path_and_data(&mut args);
             let mut l = lexer::Lexer::new(file_data.chars(), file_path);
