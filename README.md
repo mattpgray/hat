@@ -5,5 +5,14 @@ Hat is a programming language that I created for fun. It will be compiled by rus
 
 # Goals
 
+- [ ] ints
+- [ ] floats
+- [ ] strings
+- [ ] structs
+- [ ] enums
+- [ ] arrays
+- [ ] hashmaps
+- [ ] procedures
+- [ ] pure functions
+- [ ] Compiled
 - [ ] Self hosted
-- [ ] No "Features for me but not for thee"
