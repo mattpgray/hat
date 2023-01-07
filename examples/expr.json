@@ -1,0 +1,5 @@
+{
+    "return_code": 1,
+    "stderr": "/home/mgray/code/hat/examples/expr.hat:2:15: syntax error: unexpected token: if, expected word, -, # or int literal\n",
+    "stdout": ""
+}
