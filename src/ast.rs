@@ -69,113 +69,21 @@ pub struct Var {
 pub struct Proc {
     pub name: String,
     // TODO: Args are not accepted.
-    pub body: Vec<Stmt>,
+    pub body: Block,
 }
 
 #[derive(Debug, Clone)]
 pub enum Stmt {
     Expr(Expr),
-    If {
-        cond: Expr,
-        then: Vec<Stmt>,
-        else_: Option<Box<Stmt>>,
-    },
-    While {
-        cond: Expr,
-        body: Vec<Stmt>,
-    },
-    Block(Vec<Stmt>),
+    While { cond: Expr, body: Block },
     Assign(String, Expr),
 }
 
 impl Stmt {
-    fn parse_block(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Vec<Stmt>, SyntaxError> {
-        expect_token_kind(l, TokenKind::OpenCurly)?;
-        let mut stmts = Vec::new();
-        loop {
-            let tok = l.peek();
-            match tok.kind {
-                TokenKind::CloseCurly => {
-                    l.next();
-                    break;
-                }
-                TokenKind::EndOfFile => {
-                    return Err(SyntaxError::UnmatchedBracket(
-                        tok.loc.clone(),
-                        TokenKind::OpenCurly,
-                    ))
-                }
-                _ => {
-                    stmts.push(Self::parse(l)?);
-                }
-            }
-        }
-        Ok(stmts)
-    }
-
-    fn parse(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Stmt, SyntaxError> {
-        let tok = l.peek().clone();
-
-        match tok.kind {
-            TokenKind::OpenCurly => Ok(Stmt::Block(Self::parse_block(l)?)),
-            TokenKind::If => Self::parse_if(l),
-            TokenKind::While => Self::parse_while(l),
-            TokenKind::Word => {
-                l.next();
-                let p_tok = l.peek();
-                if p_tok.kind == TokenKind::Eq {
-                    l.next();
-                    let assign = Stmt::Assign(tok.text, Expr::parse(l)?);
-                    expect_token_kind(l, TokenKind::SemiColon)?;
-                    Ok(assign)
-                } else {
-                    let expr = Expr::parse_word_expr(l, &tok)?;
-                    expect_token_kind(l, TokenKind::SemiColon)?;
-                    Ok(Stmt::Expr(expr))
-                }
-            }
-            _ => {
-                let expr = Expr::parse(l)?;
-                expect_token_kind(l, TokenKind::SemiColon)?;
-                Ok(Stmt::Expr(expr))
-            }
-        }
-    }
-
-    fn parse_if(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Stmt, SyntaxError> {
-        expect_token_kind(l, TokenKind::If)?;
-        let cond = Expr::parse(l)?;
-        let then = Self::parse_block(l)?;
-
-        let tok = l.peek();
-        match tok.kind {
-            TokenKind::Else => {
-                l.next();
-                let tok = l.peek();
-                match tok.kind {
-                    TokenKind::If => {
-                        let else_ = Some(Box::new(Stmt::parse_if(l)?));
-                        Ok(Stmt::If { cond, then, else_ })
-                    }
-                    _ => {
-                        let block = Box::new(Stmt::Block(Self::parse_block(l)?));
-                        let else_ = Some(block);
-                        Ok(Stmt::If { cond, then, else_ })
-                    }
-                }
-            }
-            _ => Ok(Stmt::If {
-                cond,
-                then,
-                else_: None,
-            }),
-        }
-    }
-
     fn parse_while(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Stmt, SyntaxError> {
         expect_token_kind(l, TokenKind::While)?;
         let cond = Expr::parse(l)?;
-        let body = Self::parse_block(l)?;
+        let body = Expr::parse_block(l)?;
         Ok(Stmt::While { cond, body })
     }
 }
@@ -201,6 +109,12 @@ impl Op {
 }
 
 #[derive(Debug, Clone)]
+pub struct Block {
+    pub body: Vec<Stmt>,
+    pub ret_expr: Option<Expr>,
+}
+
+#[derive(Debug, Clone)]
 pub enum Expr {
     IntLiteral(u64),
     IntrinsicCall(String, Vec<Expr>),
@@ -212,6 +126,20 @@ pub enum Expr {
     },
     // Need an explicit bracket expr to be able to differentiate (1+2) * 3 from 1 + 2 * 3.
     BracketExpr(Box<Expr>),
+    If {
+        cond: Box<Expr>,
+        then: Box<Block>,
+        else_: Option<Box<Expr>>,
+    },
+    // Blocks are a list of statements that can optionally end with an expression. If they
+    // do end with an expression, it is returned from the block. e.g.
+    // let a = {
+    //     let b = example_func();
+    //     let c = example_func_2(b);
+    //     c + 3
+    // }
+    // This means that blocks are expressions themselves.
+    Block(Box<Block>),
 }
 
 impl Expr {
@@ -264,10 +192,14 @@ impl Expr {
     }
 
     fn parse_one(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Self, SyntaxError> {
-        let tok = l.next();
+        let tok = l.peek();
         match tok.kind {
-            TokenKind::Word => Self::parse_word_expr(l, &tok),
+            TokenKind::Word => {
+                let tok = l.next();
+                Self::parse_word_expr(l, &tok)
+            },
             TokenKind::Hash => {
+                l.next();
                 let name = expect_token_kind(l, TokenKind::Word)?.text;
                 expect_token_kind(l, TokenKind::OpenParen)?;
                 let mut args = Vec::new();
@@ -303,6 +235,7 @@ impl Expr {
                 Ok(Expr::IntrinsicCall(name, args))
             }
             TokenKind::Minus => {
+                l.next();
                 let expr = Expr::parse(l)?;
                 Ok(Expr::Op {
                     left: Box::new(Expr::IntLiteral(0)),
@@ -310,20 +243,24 @@ impl Expr {
                     op: Op::Sub,
                 })
             }
-            TokenKind::IntLiteral => Ok(Expr::IntLiteral(Self::parse_int_literal(tok.text))),
+            TokenKind::IntLiteral => {
+                let tok = l.next();
+                Ok(Expr::IntLiteral(Self::parse_int_literal(tok.text)))
+            },
             TokenKind::OpenParen => {
+                l.next();
                 let expr = Expr::parse(l)?;
                 expect_token_kind(l, TokenKind::CloseParen)?;
                 Ok(Expr::BracketExpr(Box::new(expr)))
             }
+            TokenKind::OpenCurly => Ok(Expr::Block(Box::new(Self::parse_block(l)?))),
+            TokenKind::If =>Self::parse_if(l),
             TokenKind::EndOfFile
             | TokenKind::Invalid
-            | TokenKind::OpenCurly
             | TokenKind::CloseCurly
             | TokenKind::CloseParen
             | TokenKind::SemiColon
             | TokenKind::Proc
-            | TokenKind::If
             | TokenKind::Else
             | TokenKind::Var
             | TokenKind::Eq
@@ -333,16 +270,13 @@ impl Expr {
             | TokenKind::Div
             | TokenKind::LAngleBracket
             | TokenKind::RAngleBracket
-            | TokenKind::Comma => Err(SyntaxError::UnexpectedToken {
-                loc: tok.loc,
-                found: tok.kind,
-                want: vec![
+            | TokenKind::Comma => Err(unexpected_token(tok, vec![
                     TokenKind::Word,
                     TokenKind::Minus,
                     TokenKind::Hash,
                     TokenKind::IntLiteral,
                 ],
-            }),
+            )),
         }
     }
 
@@ -413,6 +347,121 @@ impl Expr {
         }
         int_val
     }
+
+    fn parse_if(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Expr, SyntaxError> {
+        expect_token_kind(l, TokenKind::If)?;
+        let cond = Box::new(Expr::parse(l)?);
+        let then = Box::new(Self::parse_block(l)?);
+
+        let tok = l.peek();
+        match tok.kind {
+            TokenKind::Else => {
+                l.next();
+                let tok = l.peek();
+                match tok.kind {
+                    TokenKind::If => {
+                        let else_ = Some(Box::new(Self::parse_if(l)?));
+                        Ok(Self::If { cond, then, else_ })
+                    }
+                    _ => {
+                        // TODO: Maybe refactor to remove this double box.
+                        let block = Self::parse_block(l)?;
+                        let expr = Self::Block(Box::new(block));
+                        let else_ = Some(Box::new(expr));
+                        Ok(Self::If { cond, then, else_ })
+                    }
+                }
+            }
+            _ => Ok(Self::If {
+                cond,
+                then,
+                else_: None,
+            }),
+        }
+    }
+
+    fn parse_block(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Block, SyntaxError> {
+        expect_token_kind(l, TokenKind::OpenCurly)?;
+        let mut stmts = Vec::new();
+        loop {
+            let tok = l.peek();
+            match tok.kind {
+                TokenKind::CloseCurly => {
+                    l.next();
+                    break;
+                }
+                TokenKind::EndOfFile => {
+                    return Err(SyntaxError::UnmatchedBracket(
+                        tok.loc.clone(),
+                        TokenKind::OpenCurly,
+                    ))
+                }
+                _ => {
+                    let stmt = Self::parse_stmt_unsafe(l)?;
+                    match stmt.clone() {
+                        // While does not end in a semicolon
+                        Stmt::While { .. } => {
+                            stmts.push(stmt);
+                        }
+                        // Assign must end in a semicolon
+                        Stmt::Assign(..) => {
+                            expect_token_kind(l, TokenKind::SemiColon)?;
+                            stmts.push(stmt);
+                        }
+                        // An expression does not need to end in a semicolon. But, if it
+                        // does not end with a semicolon, it must be the last expression
+                        // in the block (and so end with '}').
+                        Stmt::Expr(expr) => {
+                            let tok = l.next();
+                            match tok.kind {
+                                TokenKind::SemiColon => {
+                                    stmts.push(stmt);
+                                }
+                                TokenKind::CloseCurly => {
+                                    return Ok(Block {
+                                        body: stmts,
+                                        ret_expr: Some(expr.clone()),
+                                    });
+                                }
+                                _ => {
+                                    return Err(unexpected_token(
+                                        &tok,
+                                        vec![TokenKind::SemiColon, TokenKind::CloseCurly],
+                                    ))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(Block {
+            body: stmts,
+            ret_expr: None,
+        })
+    }
+
+    // Callers of this function will need to validate the semicolons.
+    fn parse_stmt_unsafe(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Stmt, SyntaxError> {
+        let tok = l.peek().clone();
+
+        match tok.kind {
+            TokenKind::While => Ok(Stmt::parse_while(l)?),
+            TokenKind::Word => {
+                l.next();
+                let p_tok = l.peek();
+                if p_tok.kind == TokenKind::Eq {
+                    l.next();
+                    let assign = Stmt::Assign(tok.text, Expr::parse(l)?);
+                    Ok(assign)
+                } else {
+                    let expr = Expr::parse_word_expr(l, &tok)?;
+                    Ok(Stmt::Expr(expr))
+                }
+            }
+            _ => Ok(Stmt::Expr(Expr::parse(l)?)),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -466,7 +515,7 @@ impl Ast {
 
         Ok(Proc {
             name,
-            body: Stmt::parse_block(l)?,
+            body: Expr::parse_block(l)?,
         })
     }
 
@@ -514,19 +563,21 @@ fn peek_expect_token_kind(
 }
 
 fn token_expected_kind(tok: &Token, kind: TokenKind) -> Result<(), SyntaxError> {
+    if kind == tok.kind {
+        Ok(())
+    } else {
+        Err(unexpected_token(tok, vec![kind]))
+    }
+}
+
+fn unexpected_token(tok: &Token, want: Vec<TokenKind>) -> SyntaxError {
     match tok.kind.clone() {
-        TokenKind::EndOfFile => Err(SyntaxError::UnexectedEOF(tok.loc.clone())),
-        TokenKind::Invalid => Err(SyntaxError::InvalidToken(tok.loc.clone(), tok.text.clone())),
-        _ => {
-            if kind != tok.kind {
-                Err(SyntaxError::UnexpectedToken {
-                    loc: tok.loc.clone(),
-                    found: tok.kind.clone(),
-                    want: vec![kind],
-                })
-            } else {
-                Ok(())
-            }
-        }
+        TokenKind::EndOfFile => SyntaxError::UnexectedEOF(tok.loc.clone()),
+        TokenKind::Invalid => SyntaxError::InvalidToken(tok.loc.clone(), tok.text.clone()),
+        _ => SyntaxError::UnexpectedToken {
+            loc: tok.loc.clone(),
+            found: tok.kind.clone(),
+            want,
+        },
     }
 }

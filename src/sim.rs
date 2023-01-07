@@ -13,6 +13,7 @@ pub enum ExecutionError {
         got: usize,
     },
     UknownValue(String),
+    NotSupported(String),
 }
 
 impl fmt::Display for ExecutionError {
@@ -30,6 +31,7 @@ impl fmt::Display for ExecutionError {
                 write!(f, "invalid expression result: want {}, got {}", want, got)
             }
             ExecutionError::UknownValue(word) => write!(f, "unknown value: '{}'", word),
+            ExecutionError::NotSupported(msg) => write!(f, "{}", msg),
         }
     }
 }
@@ -84,7 +86,13 @@ impl Context {
     }
 
     fn run_proc(&mut self, proc: &Proc) -> Result<(), ExecutionError> {
-        self.run_stmts(&proc.body)
+        self.run_stmts(&proc.body.body)?;
+        if let Some(_) = &proc.body.ret_expr {
+            Err(ExecutionError::NotSupported("return expressions in function bodies is not supported".to_string()))
+        } else {
+            Ok(())
+        }
+
     }
 
     fn run_stmts(&mut self, stmts: &Vec<Stmt>) -> Result<(), ExecutionError> {
@@ -100,35 +108,45 @@ impl Context {
                 self.run_expr(expr)?;
                 Ok(())
             }
-            Stmt::Block(block) => self.run_stmts(block),
-            Stmt::If { cond, then, else_ } => self.run_if(cond, then, else_),
             Stmt::Assign(name, expr) => self.run_assign(name, expr),
             Stmt::While { cond, body } => self.run_while(cond, body),
+        }
+    }
+
+    fn run_block(&mut self, block: &Block) -> Result<ExprResult, ExecutionError> {
+        self.run_stmts(&block.body)?;
+        if let Some(ret_expr) = &block.ret_expr {
+            self.run_expr(ret_expr)
+        } else {
+            Ok(ExprResult{results: vec![]})
         }
     }
 
     fn run_if(
         &mut self,
         cond: &Expr,
-        then: &Vec<Stmt>,
-        else_: &Option<Box<Stmt>>,
-    ) -> Result<(), ExecutionError> {
+        then: &Box<Block>,
+        else_: &Option<Box<Expr>>,
+    ) -> Result<ExprResult, ExecutionError> {
         let cond_result = self.run_expr(cond)?;
         expect_expr_result(&cond_result, 1)?;
         if cond_result.results[0] != 0 {
-            self.run_stmts(then)
+            self.run_block(then)
         } else if let Some(else_) = else_ {
-            self.run_stmt(else_)
+            self.run_expr(else_)
         } else {
-            Ok(())
+            Ok(ExprResult{results: vec![]})
         }
     }
 
-    fn run_while(&mut self, cond: &Expr, body: &Vec<Stmt>) -> Result<(), ExecutionError> {
+    fn run_while(&mut self, cond: &Expr, body: &Block) -> Result<(), ExecutionError> {
         let mut cond_result = self.run_expr(cond)?;
         expect_expr_result(&cond_result, 1)?;
         while cond_result.results[0] != 0 {
-            self.run_stmts(body)?;
+            self.run_stmts(&body.body)?;
+            if let Some(_) = &body.ret_expr {
+                return Err(ExecutionError::NotSupported("return expressions in while bodies is not supported".to_string()))
+            } 
             cond_result = self.run_expr(cond)?;
             expect_expr_result(&cond_result, 1)?;
         }
@@ -155,6 +173,8 @@ impl Context {
             }
             Expr::Op { left, right, op } => self.run_op(left, right, op),
             Expr::BracketExpr(expr) => self.run_expr(expr),
+            Expr::If { cond, then, else_ } => self.run_if(cond, then, else_),
+            Expr::Block(block)  => self.run_block(block)
         }
     }
 
