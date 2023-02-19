@@ -143,6 +143,25 @@ pub enum Expr {
 }
 
 impl Expr {
+    // n_returns performs a quick search to determine how many values an expression returns. It
+    // does not perform a strict lookup of all branches or return types of functions.
+    fn has_return(&self) -> bool {
+        // The function definition will need to be used here? Just assume some result.
+        match self {
+            Expr::IntLiteral(..)
+            | Expr::IntrinsicCall(..)
+            | Expr::Word(..)
+            | Expr::Op { .. }
+            | Expr::BracketExpr(..) => true,
+            Expr::If {
+                cond: _,
+                then,
+                else_: _,
+            } => then.ret_expr.is_some(),
+            Expr::Block(block) => block.ret_expr.is_some(),
+        }
+    }
+
     fn parse(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Self, SyntaxError> {
         let expr = Self::parse_one(l)?;
         let tok = l.peek();
@@ -197,7 +216,7 @@ impl Expr {
             TokenKind::Word => {
                 let tok = l.next();
                 Self::parse_word_expr(l, &tok)
-            },
+            }
             TokenKind::Hash => {
                 l.next();
                 let name = expect_token_kind(l, TokenKind::Word)?.text;
@@ -246,7 +265,7 @@ impl Expr {
             TokenKind::IntLiteral => {
                 let tok = l.next();
                 Ok(Expr::IntLiteral(Self::parse_int_literal(tok.text)))
-            },
+            }
             TokenKind::OpenParen => {
                 l.next();
                 let expr = Expr::parse(l)?;
@@ -254,7 +273,7 @@ impl Expr {
                 Ok(Expr::BracketExpr(Box::new(expr)))
             }
             TokenKind::OpenCurly => Ok(Expr::Block(Box::new(Self::parse_block(l)?))),
-            TokenKind::If =>Self::parse_if(l),
+            TokenKind::If => Self::parse_if(l),
             TokenKind::EndOfFile
             | TokenKind::Invalid
             | TokenKind::CloseCurly
@@ -270,7 +289,9 @@ impl Expr {
             | TokenKind::Div
             | TokenKind::LAngleBracket
             | TokenKind::RAngleBracket
-            | TokenKind::Comma => Err(unexpected_token(tok, vec![
+            | TokenKind::Comma => Err(unexpected_token(
+                tok,
+                vec![
                     TokenKind::Word,
                     TokenKind::Minus,
                     TokenKind::Hash,
@@ -414,17 +435,26 @@ impl Expr {
                         Stmt::Expr(expr) => {
                             // If and block do not need to end with a semicolon
                             match expr {
-                                Expr::If {..} 
-                                | Expr::Block(..) => {
+                                Expr::If { .. } | Expr::Block(..) => {
                                     let tok = l.peek();
                                     if tok.kind == TokenKind::CloseCurly {
                                         l.next();
-                                        return Ok(Block {
-                                            body: stmts,
-                                            ret_expr: Some(expr.clone()),
-                                        });
+                                        // If the internal has a return expression, so do we.
+                                        if expr.has_return() {
+                                            return Ok(Block {
+                                                body: stmts,
+                                                ret_expr: Some(expr.clone()),
+                                            });
+                                        } else {
+                                            stmts.push(Stmt::Expr(expr.clone()));
+                                            return Ok(Block {
+                                                body: stmts,
+                                                ret_expr: None
+                                            });
+                                        }
+                                    } else {
+                                            stmts.push(Stmt::Expr(expr.clone()));
                                     }
-
                                 }
                                 _ => {
                                     let tok = l.next();
@@ -440,9 +470,9 @@ impl Expr {
                                         }
                                         _ => {
                                             return Err(unexpected_token(
-                                                    &tok,
-                                                    vec![TokenKind::SemiColon, TokenKind::CloseCurly],
-                                                    ))
+                                                &tok,
+                                                vec![TokenKind::SemiColon, TokenKind::CloseCurly],
+                                            ))
                                         }
                                     }
                                 }
