@@ -15,9 +15,10 @@ fn usage() {
     println!("The hat programming language");
     println!("Usage: hat SUBCOMMAND");
     println!("SUMCOMMANDS");
-    println!("    help         print this usage information");
+    println!("    help           print this usage information");
     println!("    lex   <file>   print the lexing information for the provided file");
-    println!("    parse <file>   print the ast for the provided file");
+    println!("    ast   <file>   print the ast for the provided file");
+    println!("    sim   <file>   run the provided file interactively");
 }
 
 fn get_file_path_and_data(args: &mut Vec<String>) -> (String, String) {
@@ -82,12 +83,13 @@ fn main() {
         "ast" => {
             let (file_path, file_data) = get_file_path_and_data(&mut args);
             let mut l = lexer::Lexer::new(file_data.chars(), file_path);
-            match ast::Ast::parse(&mut l) {
+            let ast = ast::Ast::parse(&mut l);
+            match &ast {
                 Err(err) => {
                     eprintln!("{}: syntax error: {}", err.loc(), err)
                 }
                 Ok(ast) => {
-                    println!("{:?}", ast);
+                    println!("{:#?}", ast);
                 }
             }
         }
