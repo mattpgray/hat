@@ -412,22 +412,39 @@ impl Expr {
                         // does not end with a semicolon, it must be the last expression
                         // in the block (and so end with '}').
                         Stmt::Expr(expr) => {
-                            let tok = l.next();
-                            match tok.kind {
-                                TokenKind::SemiColon => {
-                                    stmts.push(stmt);
-                                }
-                                TokenKind::CloseCurly => {
-                                    return Ok(Block {
-                                        body: stmts,
-                                        ret_expr: Some(expr.clone()),
-                                    });
+                            // If and block do not need to end with a semicolon
+                            match expr {
+                                Expr::If {..} 
+                                | Expr::Block(..) => {
+                                    let tok = l.peek();
+                                    if tok.kind == TokenKind::CloseCurly {
+                                        l.next();
+                                        return Ok(Block {
+                                            body: stmts,
+                                            ret_expr: Some(expr.clone()),
+                                        });
+                                    }
+
                                 }
                                 _ => {
-                                    return Err(unexpected_token(
-                                        &tok,
-                                        vec![TokenKind::SemiColon, TokenKind::CloseCurly],
-                                    ))
+                                    let tok = l.next();
+                                    match tok.kind {
+                                        TokenKind::SemiColon => {
+                                            stmts.push(stmt);
+                                        }
+                                        TokenKind::CloseCurly => {
+                                            return Ok(Block {
+                                                body: stmts,
+                                                ret_expr: Some(expr.clone()),
+                                            });
+                                        }
+                                        _ => {
+                                            return Err(unexpected_token(
+                                                    &tok,
+                                                    vec![TokenKind::SemiColon, TokenKind::CloseCurly],
+                                                    ))
+                                        }
+                                    }
                                 }
                             }
                         }
