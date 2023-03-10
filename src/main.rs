@@ -77,21 +77,25 @@ fn main() {
     let subcommand: String = args.remove(0);
     match subcommand.as_str() {
         "com" => {
+            let (file_path, file_data) = get_file_path_and_data(&mut args);
+            let mut l = lexer::Lexer::new(file_data.chars(), file_path);
+            let ast = ast::Ast::parse(&mut l).unwrap_or_else(|err| {
+                eprintln!("{}: syntax error: {}", err.loc(), err);
+                exit(1);
+            });
             let c = com::Compiler::default();
-            c.compile("./examples/func.hat").unwrap();
+            let res = c.compile("out", &ast).unwrap_or_else(|err|{
+                match err {
+                    com::CompileError::CmdError(cmd_err) => eprintln!("Error running command {}: exit code {}", cmd_err.name, cmd_err.code),
+                    com::CompileError::Io(io_err) => eprintln!("io error: {}", io_err),
+                }
+                exit(1);
+            });
         }
         "ast" => {
             let (file_path, file_data) = get_file_path_and_data(&mut args);
             let mut l = lexer::Lexer::new(file_data.chars(), file_path);
             let ast = ast::Ast::parse(&mut l);
-            match &ast {
-                Err(err) => {
-                    eprintln!("{}: syntax error: {}", err.loc(), err)
-                }
-                Ok(ast) => {
-                    println!("{:#?}", ast);
-                }
-            }
         }
         "sim" => {
             let (file_path, file_data) = get_file_path_and_data(&mut args);
