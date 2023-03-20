@@ -42,6 +42,9 @@ impl Compiler {
 
         writeln!(file, "_start:")?;
         writeln!(file, "        call main")?;
+        writeln!(file, "        mov     rax, 60")?;
+        writeln!(file, "        xor     rdi, rdi")?;
+        writeln!(file, "        syscall")?;
         writeln!(file, "")?;
         writeln!(file, "        section .data")?;
         writeln!(file, "message: db     \"Hello, world\", 10")?;
