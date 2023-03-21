@@ -86,7 +86,7 @@ fn main() {
             let c = com::Compiler::default();
             let res = c.compile("out", &ast).unwrap_or_else(|err|{
                 match err {
-                    com::CompileError::CmdError(cmd_err) => eprintln!("Error running command {}: exit code {}", cmd_err.name, cmd_err.code),
+                    com::CompileError::CmdError(cmd_err) => eprintln!("Error running command {}: exit code {}, output: \n{}", cmd_err.name, cmd_err.code, cmd_err.message),
                     com::CompileError::Io(io_err) => eprintln!("io error: {}", io_err),
                 }
                 exit(1);
