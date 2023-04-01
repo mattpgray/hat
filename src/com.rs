@@ -279,8 +279,20 @@ format_char_hex_end:
                         writeln!(file, "        mov rdx, 0")?;
                         writeln!(file, "        div rbx")?;
                     }
-                    ast::Op::Gt => todo!(),
-                    ast::Op::Lt => todo!(),
+                    ast::Op::Gt => {
+                        writeln!(file, "        mov rcx, 0")?;
+                        writeln!(file, "        mov rdx, 1")?;
+                        writeln!(file, "        cmp rax, rbx")?;
+                        writeln!(file, "        cmovg rcx, rdx")?;
+                        writeln!(file, "        mov rax, rcx")?;
+                    }
+                    ast::Op::Lt => {
+                        writeln!(file, "        mov rcx, 0")?;
+                        writeln!(file, "        mov rdx, 1")?;
+                        writeln!(file, "        cmp rax, rbx")?;
+                        writeln!(file, "        cmovl rcx, rdx")?;
+                        writeln!(file, "        mov rax, rcx")?;
+                    }
                 }
                 Ok(())
             }
