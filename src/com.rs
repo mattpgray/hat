@@ -5,7 +5,7 @@ use std::process::Command;
 
 #[derive(Default)]
 pub struct Compiler {
-    n_ifs: usize // Incremented as we go
+    n_ifs: usize, // Incremented as we go
 }
 
 impl Compiler {
@@ -142,24 +142,61 @@ format_char_hex_end:
     }
 
     fn compile_ast(&mut self, ast: &ast::Ast, file: &mut File) -> Result<(), CompileError> {
+        self.compile_text(ast, file)?;
+        self.compile_data(ast, file)?;
+        self.compile_bss(ast, file)?;
+        Ok(())
+    }
+
+    fn compile_text(&mut self, ast: &ast::Ast, file: &mut File) -> Result<(), CompileError> {
         writeln!(file, "section .text")?;
         writeln!(file, "global _start")?;
-        // Hard coded print intrinsic - also uses the print buf below
+        // Hard coded print intrinsic - also uses the print buf compile_bss
         self.compile_print(file)?;
 
         for decl in &ast.decls {
             match decl {
-                ast::Decl::Var(var) => self.compile_global_variable(var, file)?,
                 ast::Decl::Proc(proc) => self.compile_proc(proc, file)?,
+                ast::Decl::Var(_) => continue,
             }
         }
 
         writeln!(file, "_start:")?;
+        self.write_comment(
+            file,
+            "------- begin global variable initialization --------",
+        )?;
+        for decl in &ast.decls {
+            match decl {
+                ast::Decl::Proc(_) => continue,
+                ast::Decl::Var(var) => self.compile_global_variable_initialization(var, file)?,
+            }
+        }
+        self.write_comment(
+            file,
+            "------- end global variable initialization ----------",
+        )?;
+
         writeln!(file, "        call main")?;
         writeln!(file, "        mov     rax, 60")?;
         writeln!(file, "        xor     rdi, rdi")?;
         writeln!(file, "        syscall")?;
         writeln!(file, "")?;
+        Ok(())
+    }
+
+    fn compile_data(&mut self, ast: &ast::Ast, file: &mut File) -> Result<(), CompileError> {
+        writeln!(file, "section .data")?;
+        for decl in &ast.decls {
+            match decl {
+                ast::Decl::Var(var) => writeln!(file, "        {}: dq 0", var.name,)?,
+                ast::Decl::Proc(_) => continue,
+            }
+        }
+        Ok(())
+    }
+
+    fn compile_bss(&mut self, ast: &ast::Ast, file: &mut File) -> Result<(), CompileError> {
         writeln!(file, "section .bss")?;
         writeln!(
             file,
@@ -168,8 +205,15 @@ format_char_hex_end:
         Ok(())
     }
 
-    fn compile_global_variable(&mut self, var: &ast::Var, file: &mut File) -> Result<(), CompileError> {
-        todo!("compile_global_variable is not implemented yet");
+    fn compile_global_variable_initialization(
+        &mut self,
+        var: &ast::Var,
+        file: &mut File,
+    ) -> Result<(), CompileError> {
+        if let Some(expr) = &var.value {
+            self.compile_assign(&var.name, expr, file)?;
+        }
+        Ok(())
     }
 
     fn compile_proc(&mut self, proc: &ast::Proc, file: &mut File) -> Result<(), CompileError> {
@@ -198,7 +242,10 @@ format_char_hex_end:
             ast::Expr::IntrinsicCall(name, exprs) => {
                 self.compile_interinsic_call(name, exprs, file)
             }
-            ast::Expr::Word(_) => todo!(),
+            ast::Expr::Word(word) => {
+                writeln!(file, "        mov rax, [{}]", word)?;
+                Ok(())
+            }
             ast::Expr::Op { left, right, op } => {
                 self.write_comment(
                     file,
@@ -263,14 +310,16 @@ format_char_hex_end:
     ) -> Result<(), CompileError> {
         self.compile_expr(cond, file)?;
         let if_idx = self.n_ifs;
-        self.n_ifs = self.n_ifs+1;
+        self.n_ifs = self.n_ifs + 1;
 
-        // condition logic. Get the current if index and setup jumps based on the 
+        // condition logic. Get the current if index and setup jumps based on the
         // result of the comparison.
         writeln!(file, "        cmp rax, 0")?;
         writeln!(file, "        jne JMP_IF_THEN_{if_idx}")?;
         if let Some(_) = else_ {
             writeln!(file, "        jmp JMP_IF_ELSE_{if_idx}")?;
+        } else {
+            writeln!(file, "        jmp JMP_IF_END_{if_idx}")?;
         }
 
         // Then block
@@ -300,8 +349,19 @@ format_char_hex_end:
         match stmt {
             ast::Stmt::Expr(expr) => self.compile_expr(expr, file),
             ast::Stmt::While { cond, body } => todo!(),
-            ast::Stmt::Assign(_, _) => todo!(),
+            ast::Stmt::Assign(name, expr) => self.compile_assign(name, expr, file),
         }
+    }
+
+    fn compile_assign(
+        &mut self,
+        name: &String,
+        expr: &ast::Expr,
+        file: &mut File,
+    ) -> Result<(), CompileError> {
+        self.compile_expr(expr, file)?;
+        writeln!(file, "        mov qword [{}], rax", name)?;
+        Ok(())
     }
 
     fn compile_interinsic_call(
