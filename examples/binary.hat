@@ -1,0 +1,3 @@
+proc main() {
+    #print_binary(85); // 1010101
+}

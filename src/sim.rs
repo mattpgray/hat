@@ -243,6 +243,22 @@ impl Context {
                     results: Vec::new(),
                 })
             }
+            "print_binary" => {
+                if args.len() != 1 {
+                    return Err(ExecutionError::InvalidArgs {
+                        name: format!("#{}", name),
+                        want: 1,
+                        got: args.len(),
+                    });
+                }
+                let evaluated_args = self.run_args(args)?;
+                assert_eq!(evaluated_args.len(), 1);
+
+                println!("{:b}", evaluated_args[0]);
+                Ok(ExprResult {
+                    results: Vec::new(),
+                })
+            }
             _ => Err(ExecutionError::InvalidIntrinsic(name.to_string())),
         }
     }

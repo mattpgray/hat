@@ -155,7 +155,7 @@ format_char_hex_end:
         writeln!(file, "        syscall")?;
         writeln!(file, "")?;
         writeln!(file, "section .bss")?;
-        writeln!(file, "        print_buf: resb 17")?;
+        writeln!(file, "        print_buf: resb 65; 64 for binary plus newline")?;
         Ok(())
     }
 
@@ -280,6 +280,12 @@ format_char_hex_end:
                 assert!(exprs.len() == 1, "unexpected number of arguments");
                 self.compile_expr(&exprs[0], file)?;
                 writeln!(file, "        mov rcx, 16")?; // The base
+                writeln!(file, "        call print_uint64")?;
+            }
+            "print_binary" => {
+                assert!(exprs.len() == 1, "unexpected number of arguments");
+                self.compile_expr(&exprs[0], file)?;
+                writeln!(file, "        mov rcx, 2")?; // The base
                 writeln!(file, "        call print_uint64")?;
             }
             // This willbe caught during type checking eventually. No need for a good error now.
