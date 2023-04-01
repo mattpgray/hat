@@ -1,3 +1,6 @@
+// I do not like code golf
+#![allow(clippy::bool_to_int_with_if)]
+
 use std::env;
 use std::fmt;
 use std::fs;
@@ -90,6 +93,8 @@ fn parse_compile_args(args: Vec<String>) -> CompileArgs {
     let in_file = in_file.unwrap();
     CompileArgs { out_file, in_file }
 }
+
+#[allow(clippy::bool_to_int_with_if)]
 
 fn main() {
     let mut args: Vec<String> = env::args().collect();

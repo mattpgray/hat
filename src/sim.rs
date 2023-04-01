@@ -127,7 +127,7 @@ impl Context {
     fn run_if(
         &mut self,
         cond: &Expr,
-        then: &Box<Block>,
+        then: &Block,
         else_: &Option<Box<Expr>>,
     ) -> Result<ExprResult, ExecutionError> {
         let cond_result = self.run_expr(cond)?;
