@@ -196,7 +196,7 @@ format_char_hex_end:
         Ok(())
     }
 
-    fn compile_bss(&mut self, ast: &ast::Ast, file: &mut File) -> Result<(), CompileError> {
+    fn compile_bss(&mut self, _ast: &ast::Ast, file: &mut File) -> Result<(), CompileError> {
         writeln!(file, "section .bss")?;
         writeln!(
             file,
