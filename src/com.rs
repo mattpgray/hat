@@ -12,7 +12,7 @@ impl Compiler {
     pub fn compile(&mut self, out_file: String, ast: &ast::Ast) -> Result<(), CompileError> {
         {
             let mut out = File::create("out.asm")?;
-            self.compile_ast(&ast, &mut out)?;
+            self.compile_ast(ast, &mut out)?;
         }
         cmd("nasm", &["-felf64", "out.asm"])?;
         cmd("ld", &["out.o", "-o", out_file.as_str()])?;
@@ -181,7 +181,7 @@ format_char_hex_end:
         writeln!(file, "        mov     rax, 60")?;
         writeln!(file, "        xor     rdi, rdi")?;
         writeln!(file, "        syscall")?;
-        writeln!(file, "")?;
+        writeln!(file)?;
         Ok(())
     }
 
@@ -332,7 +332,7 @@ format_char_hex_end:
         // result of the comparison.
         writeln!(file, "        cmp rax, 0")?;
         writeln!(file, "        jne JMP_IF_THEN_{if_idx}")?;
-        if let Some(_) = else_ {
+        if else_.is_some() {
             writeln!(file, "        jmp JMP_IF_ELSE_{if_idx}")?;
         } else {
             writeln!(file, "        jmp JMP_IF_END_{if_idx}")?;
@@ -413,7 +413,7 @@ format_char_hex_end:
 
     fn next_jump_idx( &mut self,) -> usize{
         let jump_idx = self.n_jumps;
-        self.n_jumps = self.n_jumps + 1;
+        self.n_jumps += 1;
         jump_idx
     }
 }

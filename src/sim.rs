@@ -89,7 +89,7 @@ impl Context {
 
     fn run_proc(&mut self, proc: &Proc) -> Result<(), ExecutionError> {
         self.run_stmts(&proc.body.body)?;
-        if let Some(_) = &proc.body.ret_expr {
+        if proc.body.ret_expr.is_some() {
             Err(ExecutionError::NotSupported("return expressions in function bodies is not supported".to_string()))
         } else {
             Ok(())
@@ -146,7 +146,7 @@ impl Context {
         expect_expr_result(&cond_result, 1)?;
         while cond_result.results[0] != 0 {
             self.run_stmts(&body.body)?;
-            if let Some(_) = &body.ret_expr {
+            if body.ret_expr.is_some() {
                 return Err(ExecutionError::NotSupported("return expressions in while bodies is not supported".to_string()))
             } 
             cond_result = self.run_expr(cond)?;

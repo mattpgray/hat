@@ -443,10 +443,10 @@ impl Expr {
                                         if expr.has_return() {
                                             return Ok(Block {
                                                 body: stmts,
-                                                ret_expr: Some(expr.clone()),
+                                                ret_expr: Some(expr),
                                             });
                                         } else {
-                                            stmts.push(Stmt::Expr(expr.clone()));
+                                            stmts.push(Stmt::Expr(expr));
                                             return Ok(Block {
                                                 body: stmts,
                                                 ret_expr: None
@@ -465,7 +465,7 @@ impl Expr {
                                         TokenKind::CloseCurly => {
                                             return Ok(Block {
                                                 body: stmts,
-                                                ret_expr: Some(expr.clone()),
+                                                ret_expr: Some(expr),
                                             });
                                         }
                                         _ => {

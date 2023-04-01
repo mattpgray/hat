@@ -78,14 +78,14 @@ fn parse_compile_args(args: Vec<String>) -> CompileArgs {
     while i < args.len() {
         match args[i].as_str() {
             "-o" => {
-                i = i + 1;
+                i += 1;
                 out_file = args.get(i).unwrap().to_owned();
             }
             _ => {
                 in_file = Some(args[i].to_string());
             }
         }
-        i = i + 1;
+        i += 1;
     }
     let in_file = in_file.unwrap();
     CompileArgs { out_file, in_file }
