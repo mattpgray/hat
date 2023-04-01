@@ -83,7 +83,7 @@ fn main() {
                 eprintln!("{}: syntax error: {}", err.loc(), err);
                 exit(1);
             });
-            let c = com::Compiler::default();
+            let mut c = com::Compiler::default();
             let res = c.compile("out", &ast).unwrap_or_else(|err|{
                 match err {
                     com::CompileError::CmdError(cmd_err) => eprintln!("Error running command {}: exit code {}, output: \n{}", cmd_err.name, cmd_err.code, cmd_err.message),

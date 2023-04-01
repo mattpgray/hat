@@ -4,10 +4,12 @@ use std::io::prelude::*;
 use std::process::Command;
 
 #[derive(Default)]
-pub struct Compiler {}
+pub struct Compiler {
+    n_ifs: usize // Incremented as we go
+}
 
 impl Compiler {
-    pub fn compile(&self, out_file: &str, ast: &ast::Ast) -> Result<(), CompileError> {
+    pub fn compile(&mut self, out_file: &str, ast: &ast::Ast) -> Result<(), CompileError> {
         {
             let mut out = File::create("out.asm")?;
             self.compile_ast(&ast, &mut out)?;
@@ -18,9 +20,13 @@ impl Compiler {
     }
 
     fn compile_print(&self, file: &mut File) -> Result<(), CompileError> {
-        self.write_comment(file, "; -------------------- begin print intrinsic ---------")?;
-        writeln!(file,
-"
+        self.write_comment(
+            file,
+            "; -------------------- begin print intrinsic ---------",
+        )?;
+        writeln!(
+            file,
+            "
 ; inputs
 ; ------
 ; rax: uint64 to format
@@ -130,12 +136,15 @@ format_char_hex_greater_than_9:
 format_char_hex_end:
     ret
 "
-            )?;
-        self.write_comment(file, "; -------------------- end print intrinsic -----------")?;
+        )?;
+        self.write_comment(
+            file,
+            "; -------------------- end print intrinsic -----------",
+        )?;
         Ok(())
     }
 
-    fn compile_ast(&self, ast: &ast::Ast, file: &mut File) -> Result<(), CompileError> {
+    fn compile_ast(&mut self, ast: &ast::Ast, file: &mut File) -> Result<(), CompileError> {
         writeln!(file, "section .text")?;
         writeln!(file, "global _start")?;
         // Hard coded print intrinsic - also uses the print buf below
@@ -155,22 +164,25 @@ format_char_hex_end:
         writeln!(file, "        syscall")?;
         writeln!(file, "")?;
         writeln!(file, "section .bss")?;
-        writeln!(file, "        print_buf: resb 65; 64 for binary plus newline")?;
+        writeln!(
+            file,
+            "        print_buf: resb 65; 64 for binary plus newline"
+        )?;
         Ok(())
     }
 
-    fn compile_global_variable(&self, var: &ast::Var, file: &mut File) -> Result<(), CompileError> {
+    fn compile_global_variable(&mut self, var: &ast::Var, file: &mut File) -> Result<(), CompileError> {
         todo!("compile_global_variable is not implemented yet");
     }
 
-    fn compile_proc(&self, proc: &ast::Proc, file: &mut File) -> Result<(), CompileError> {
+    fn compile_proc(&mut self, proc: &ast::Proc, file: &mut File) -> Result<(), CompileError> {
         writeln!(file, "{}:", proc.name)?;
         self.compile_block(&proc.body, file)?;
         writeln!(file, "        ret")?;
         Ok(())
     }
 
-    fn compile_block(&self, block: &ast::Block, file: &mut File) -> Result<(), CompileError> {
+    fn compile_block(&mut self, block: &ast::Block, file: &mut File) -> Result<(), CompileError> {
         for stmt in &block.body {
             self.compile_stmt(stmt, file)?;
         }
@@ -180,7 +192,7 @@ format_char_hex_end:
         Ok(())
     }
 
-    fn compile_expr(&self, expr: &ast::Expr, file: &mut File) -> Result<(), CompileError> {
+    fn compile_expr(&mut self, expr: &ast::Expr, file: &mut File) -> Result<(), CompileError> {
         match expr {
             ast::Expr::IntLiteral(num) => {
                 writeln!(file, "        mov rax, {}", num)?;
@@ -230,22 +242,54 @@ format_char_hex_end:
                 Ok(())
             }
             ast::Expr::BracketExpr(expr) => self.compile_expr(expr, file),
-            ast::Expr::If { cond, then, else_ } => todo!(),
+            ast::Expr::If { cond, then, else_ } => self.compile_if(file, cond, then, else_),
             ast::Expr::Block(block) => {
                 self.write_comment(file, "Beginning block")?;
                 for stmt in &block.body {
                     self.compile_stmt(stmt, file)?;
                 }
                 if let Some(ret_expr) = &block.ret_expr {
-                    self.write_comment(
-                        file,
-                        "Block return expression.",
-                    )?;
+                    self.write_comment(file, "Block return expression.")?;
                     self.compile_expr(ret_expr, file)?;
                 }
                 Ok(())
             }
         }
+    }
+
+    fn compile_if(
+        &mut self,
+        file: &mut File,
+        cond: &ast::Expr,
+        then: &ast::Block,
+        else_: &Option<Box<ast::Expr>>,
+    ) -> Result<(), CompileError> {
+        self.compile_expr(cond, file)?;
+        let if_idx = self.n_ifs;
+        self.n_ifs = self.n_ifs+1;
+
+        // condition logic. Get the current if index and setup jumps based on the 
+        // result of the comparison.
+        writeln!(file, "        cmp rax, 0")?;
+        writeln!(file, "        jne JMP_IF_THEN_{if_idx}")?;
+        if let Some(_) = else_ {
+            writeln!(file, "        jmp JMP_IF_ELSE_{if_idx}")?;
+        }
+
+        // Then block
+        writeln!(file, "JMP_IF_THEN_{if_idx}:")?;
+        self.compile_block(then, file)?;
+        writeln!(file, "        jmp JMP_IF_END_{if_idx}")?;
+
+        // Else block
+        if let Some(else_) = else_ {
+            writeln!(file, "JMP_IF_ELSE_{if_idx}:")?;
+            self.compile_expr(else_, file)?;
+            writeln!(file, "        jmp JMP_IF_END_{if_idx}")?;
+        }
+
+        writeln!(file, "JMP_IF_END_{if_idx}:")?;
+        Ok(())
     }
 
     fn write_comment(&self, file: &mut File, msg: &str) -> Result<(), CompileError> {
@@ -255,7 +299,7 @@ format_char_hex_end:
         Ok(())
     }
 
-    fn compile_stmt(&self, stmt: &ast::Stmt, file: &mut File) -> Result<(), CompileError> {
+    fn compile_stmt(&mut self, stmt: &ast::Stmt, file: &mut File) -> Result<(), CompileError> {
         match stmt {
             ast::Stmt::Expr(expr) => self.compile_expr(expr, file),
             ast::Stmt::While { cond, body } => todo!(),
@@ -264,7 +308,7 @@ format_char_hex_end:
     }
 
     fn compile_interinsic_call(
-        &self,
+        &mut self,
         name: &str,
         exprs: &Vec<ast::Expr>,
         file: &mut File,
