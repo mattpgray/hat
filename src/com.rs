@@ -5,7 +5,7 @@ use std::process::Command;
 
 #[derive(Default)]
 pub struct Compiler {
-    n_ifs: usize, // Incremented as we go
+    n_jumps: usize, // Incremented as we go
 }
 
 impl Compiler {
@@ -301,6 +301,23 @@ format_char_hex_end:
         }
     }
 
+    fn compile_while(
+        &mut self,
+        file: &mut File,
+        cond: &ast::Expr,
+        body: &ast::Block,
+    ) -> Result<(), CompileError> {
+        let while_idx = self.next_jump_idx();
+        writeln!(file, "JMP_WHILE_START_{while_idx}:")?;
+        self.compile_expr(cond, file)?;
+        writeln!(file, "        cmp rax, 0")?;
+        writeln!(file, "        je JMP_WHILE_END_{while_idx}")?;
+        self.compile_block(body, file)?;
+        writeln!(file, "        jmp JMP_WHILE_START_{while_idx}")?;
+        writeln!(file, "JMP_WHILE_END_{while_idx}:")?;
+        Ok(())
+    }
+
     fn compile_if(
         &mut self,
         file: &mut File,
@@ -309,8 +326,7 @@ format_char_hex_end:
         else_: &Option<Box<ast::Expr>>,
     ) -> Result<(), CompileError> {
         self.compile_expr(cond, file)?;
-        let if_idx = self.n_ifs;
-        self.n_ifs = self.n_ifs + 1;
+        let if_idx = self.next_jump_idx();
 
         // condition logic. Get the current if index and setup jumps based on the
         // result of the comparison.
@@ -348,7 +364,7 @@ format_char_hex_end:
     fn compile_stmt(&mut self, stmt: &ast::Stmt, file: &mut File) -> Result<(), CompileError> {
         match stmt {
             ast::Stmt::Expr(expr) => self.compile_expr(expr, file),
-            ast::Stmt::While { cond, body } => todo!(),
+            ast::Stmt::While { cond, body } => self.compile_while(file, cond, body),
             ast::Stmt::Assign(name, expr) => self.compile_assign(name, expr, file),
         }
     }
@@ -394,7 +410,14 @@ format_char_hex_end:
         }
         Ok(())
     }
+
+    fn next_jump_idx( &mut self,) -> usize{
+        let jump_idx = self.n_jumps;
+        self.n_jumps = self.n_jumps + 1;
+        jump_idx
+    }
 }
+
 
 #[derive(Debug)]
 pub enum CompileError {
