@@ -9,13 +9,13 @@ pub struct Compiler {
 }
 
 impl Compiler {
-    pub fn compile(&mut self, out_file: &str, ast: &ast::Ast) -> Result<(), CompileError> {
+    pub fn compile(&mut self, out_file: String, ast: &ast::Ast) -> Result<(), CompileError> {
         {
             let mut out = File::create("out.asm")?;
             self.compile_ast(&ast, &mut out)?;
         }
         cmd("nasm", &["-felf64", "out.asm"])?;
-        cmd("ld", &["out.o", "-o", "out"])?;
+        cmd("ld", &["out.o", "-o", out_file.as_str()])?;
         Ok(())
     }
 
