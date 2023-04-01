@@ -227,8 +227,8 @@ format_char_hex_end:
         for stmt in &block.body {
             self.compile_stmt(stmt, file)?;
         }
-        if let Some(_) = block.ret_expr {
-            todo!("parsing of block return bodies is not implented yet");
+        if let Some(ret_expr) = &block.ret_expr {
+            self.compile_expr(ret_expr, file)?;
         }
         Ok(())
     }
