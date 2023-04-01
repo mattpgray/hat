@@ -1,0 +1,5 @@
+proc main() {
+    #print_hex(0); // 0
+    #print_hex(10); // a
+    #print_hex(16); // 10
+}

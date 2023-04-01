@@ -77,67 +77,64 @@ do_print_decimal_uint64:
 "
             )?;
         self.write_comment(file, "; -------------------- end print intrinsic -----------")?;
+        self.write_comment(file, "; -------------------- begin print_hex intrinsic -----")?;
+        writeln!(file,
+"
+; The int to print is stored in rax
+print_hex_uint64:
+    xor rdx, rdx               ; The number of characters in the buffer
+    mov rsi, print_buf         ; si points to the target buffer
+    mov rbx, rax               ; store a copy in bx
 
-        writeln!(file, "print_hex_uint:")?;
-        writeln!(
-            file,
-            "    xor rdx, rdx               ; The number of characters in the buffer"
-        )?;
-        writeln!(
-            file,
-            "    mov rsi, print_buf         ; si points to the target buffer"
-        )?;
-        writeln!(file, "    mov rbx, rax               ; store a copy in bx")?;
-        writeln!(file, "")?;
-        writeln!(file, "    cmp rax, 0")?;
-        writeln!(file, "    jne  start_strip_leading_zeros")?;
-        writeln!(file, "    ; Special case for 0")?;
-        writeln!(file, "    mov byte [rsi], 030h")?;
-        writeln!(file, "    inc rsi")?;
-        writeln!(file, "    inc rdx")?;
-        writeln!(file, "    jmp done_conversion")?;
-        writeln!(file, "")?;
-        writeln!(file, "strip_leading_zeros:")?;
-        writeln!(
-            file,
-            "    shl rbx, 4                      ; get the next part"
-        )?;
-        writeln!(file, "")?;
-        writeln!(file, "start_strip_leading_zeros:")?;
-        writeln!(file, "    mov rax, rbx          ; load the number into ax")?;
-        writeln!(file, "    shr rax, 60           ; grap the last byte")?;
-        writeln!(file, "    jz strip_leading_zeros ; if this is zero then keep stripping. Otherwise continue to printing below")?;
-        writeln!(file, "")?;
-        writeln!(file, "convert_loop:")?;
-        writeln!(file, "    mov rax, rbx          ; load the number into ax")?;
-        writeln!(file, "    shr rax, 60           ; grab the last byte")?;
-        writeln!(file, "")?;
-        writeln!(file, "    cmp rax, 9h          ; check what we should add")?;
-        writeln!(file, "    jg  greater_than_9")?;
-        writeln!(file, "    add rax, 30h         ; 0x30 ('0')")?;
-        writeln!(file, "    jmp converted")?;
-        writeln!(file, "")?;
-        writeln!(file, "greater_than_9:")?;
-        writeln!(file, "    ; num + 'a' - 10")?;
-        writeln!(file, "    add rax, 61h         ; or 0x61 ('a')")?;
-        writeln!(file, "    sub rax, 10")?;
-        writeln!(file, "")?;
-        writeln!(file, "converted:")?;
-        writeln!(file, "    mov [rsi], rax")?;
-        writeln!(file, "    inc rsi")?;
-        writeln!(file, "    inc rdx")?;
-        writeln!(file, "    shl rbx, 4           ; get the next part")?;
-        writeln!(file, "    jnz convert_loop")?;
-        writeln!(file, "")?;
-        writeln!(file, "done_conversion:")?;
-        writeln!(file, "    mov byte [rsi], 10 ; new line")?;
-        writeln!(file, "    inc rdx")?;
-        writeln!(file, "")?;
-        writeln!(file, "    mov     rax, 1")?;
-        writeln!(file, "    mov     rdi, 1")?;
-        writeln!(file, "    mov     rsi, print_buf")?;
-        writeln!(file, "    syscall")?;
-        writeln!(file, "    ret")?;
+    cmp rax, 0
+    jne  start_strip_leading_zeros
+    ; Special case for 0
+    mov byte [rsi], 030h
+    inc rsi
+    inc rdx
+    jmp done_conversion
+
+strip_leading_zeros:
+    shl rbx, 4                      ; get the next part
+
+start_strip_leading_zeros:
+    mov rax, rbx          ; load the number into ax
+    shr rax, 60           ; grap the last byte
+    jz strip_leading_zeros ; if this is zero then keep stripping. Otherwise continue to printing below
+
+convert_loop:
+    mov rax, rbx          ; load the number into ax
+    shr rax, 60           ; grab the last byte
+
+    cmp rax, 9h          ; check what we should add
+    jg  greater_than_9
+    add rax, 30h         ; 0x30 ('0')
+    jmp converted
+
+greater_than_9:
+    ; num + 'a' - 10
+    add rax, 61h         ; or 0x61 ('a')
+    sub rax, 10
+
+converted:
+    mov [rsi], rax
+    inc rsi
+    inc rdx
+    shl rbx, 4           ; get the next part
+    jnz convert_loop
+
+done_conversion:
+    mov byte [rsi], 10 ; new line
+    inc rdx
+
+    mov     rax, 1
+    mov     rdi, 1
+    mov     rsi, print_buf
+    syscall
+    ret
+"
+                 )?;
+        self.write_comment(file, "; -------------------- end print_hex intrinsic -------")?;
         Ok(())
     }
 
@@ -281,30 +278,16 @@ do_print_decimal_uint64:
                 self.compile_expr(&exprs[0], file)?;
                 writeln!(file, "        call print_decimal_uint64")?;
             }
+            "print_hex" => {
+                assert!(exprs.len() == 1, "unexpected number of arguments");
+                self.compile_expr(&exprs[0], file)?;
+                writeln!(file, "        call print_hex_uint64")?;
+            }
             // This willbe caught during type checking eventually. No need for a good error now.
             _ => panic!("unknown intrinsic: {}", name),
         }
         Ok(())
     }
-}
-
-fn hex_num(num: u64) -> String {
-    let mut sb = String::new();
-    let mut num = num;
-    loop {
-        let remainder: u8 = u8::try_from(num % 16).expect("Should fit into a u8");
-        num = num / 16;
-        let char = if remainder < 10 {
-            '0' as u8 + remainder
-        } else {
-            'a' as u8 + remainder - 10
-        };
-        sb.insert(0, char as char);
-        if num == 0 {
-            break;
-        }
-    }
-    sb
 }
 
 #[derive(Debug)]

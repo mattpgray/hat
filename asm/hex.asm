@@ -2,27 +2,7 @@ section .text
 global _start
 
 ; The int to print is stored in rax
-
-print2:
-    mov rsi, print_buf
-    add rax, 30h         ; 0x30 ('0')
-    mov [rsi], rax
-    inc rsi
-    mov [rsi], rax
-    inc rsi
-    mov [rsi], rax
-    inc rsi
-    mov [rsi], rax
-    inc rsi
-    mov byte [rsi], 10
-    mov     rax, 1
-    mov     rdi, 1
-    mov     rsi, print_buf
-    mov     rdx, 5
-    syscall
-    ret
-
-print_hex_uint:
+print_hex_uint64:
     xor rdx, rdx               ; The number of characters in the buffer
     mov rsi, print_buf         ; si points to the target buffer
     mov rbx, rax               ; store a copy in bx
@@ -76,9 +56,9 @@ done_conversion:
 
 _start:
         mov     rax, 0
-        call    print_hex_uint
+        call    print_hex_uint64
         mov     rax, 12h
-        call    print_hex_uint
+        call    print_hex_uint64
         mov     rax, 60
         xor     rdi, rdi
         syscall

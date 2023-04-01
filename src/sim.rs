@@ -12,6 +12,7 @@ pub enum ExecutionError {
         want: usize,
         got: usize,
     },
+    InvalidIntrinsic(String),
     UknownValue(String),
     NotSupported(String),
 }
@@ -32,6 +33,7 @@ impl fmt::Display for ExecutionError {
             }
             ExecutionError::UknownValue(word) => write!(f, "unknown value: '{}'", word),
             ExecutionError::NotSupported(msg) => write!(f, "{}", msg),
+            ExecutionError::InvalidIntrinsic(intrinsic) => write!(f, "invalid intrinsic #{}", intrinsic),
         }
     }
 }
@@ -225,7 +227,23 @@ impl Context {
                     results: Vec::new(),
                 })
             }
-            _ => Err(ExecutionError::NoMainProc),
+            "print_hex" => {
+                if args.len() != 1 {
+                    return Err(ExecutionError::InvalidArgs {
+                        name: format!("#{}", name),
+                        want: 1,
+                        got: args.len(),
+                    });
+                }
+                let evaluated_args = self.run_args(args)?;
+                assert_eq!(evaluated_args.len(), 1);
+
+                println!("{:x}", evaluated_args[0]);
+                Ok(ExprResult {
+                    results: Vec::new(),
+                })
+            }
+            _ => Err(ExecutionError::InvalidIntrinsic(name.to_string())),
         }
     }
 

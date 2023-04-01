@@ -96,6 +96,7 @@ fn main() {
             let (file_path, file_data) = get_file_path_and_data(&mut args);
             let mut l = lexer::Lexer::new(file_data.chars(), file_path);
             let ast = ast::Ast::parse(&mut l);
+            println!("{ast:#?}");
         }
         "sim" => {
             let (file_path, file_data) = get_file_path_and_data(&mut args);
