@@ -34,26 +34,17 @@ def dict_compare(d1, d2):
     same = set(o for o in shared_keys if d1[o] == d2[o])
     return added, removed, modified, same
 
-def main() :
-    """
-    This script allows for testing the hat programming language.
-    It runs the program files in the examples directory and checks that
-    the output has not changed.
-    """
+def run_com(file):
+    subprocess.run(["./target/release/hat", "com", file], check=True)
+    return subprocess.run(["./out"], capture_output=True)
 
-    parser = argparse.ArgumentParser(
-        prog = 'hat tester', 
-        description = 'Tests the hat compiler against a set of example programs'
-    )
+def run_sim(file):
+    return subprocess.run(["./target/release/hat", "sim", file], capture_output=True)
 
-    parser.add_argument('-u', '--update', action="store_true", help="Update the test outputs instead of testing")
-    path_default = local_path("target", "debug", "hat")
-    parser.add_argument('-p', '--path', default=path_default, help="The path to the hat comiler executable")
-
+def run_tests(args, runner):
     result = 0
-    args = parser.parse_args()
     for file in test_files():
-        proc_result = subprocess.run([args.path, "sim", file], capture_output=True)
+        proc_result = runner(file)
         result_dict = {
                 "stdout": proc_result.stdout.decode("utf-8"),
                 "stderr": proc_result.stderr.decode("utf-8"),
@@ -72,6 +63,35 @@ def main() :
             if len(added) != 0 or len(removed) != 0 or len(modified) != 0:
                 print(f"{file} test failure {result_dict} != {want}", file=sys.stderr)
                 result = 1
+    return result
+
+def main() :
+    """
+    This script allows for testing the hat programming language.
+    It runs the program files in the examples directory and checks that
+    the output has not changed.
+    """
+
+    parser = argparse.ArgumentParser(
+        prog = 'hat tester', 
+        description = 'Tests the hat compiler against a set of example programs'
+    )
+
+    parser.add_argument('-u', '--update', action="store_true", help="Update the test outputs instead of testing")
+    parser.add_argument('-m', '--mode', default="sim", help="The mode of hat to test.", choices=("sim", "com"))
+    args = parser.parse_args()
+
+    print("Compling hat...")
+    subprocess.run(["cargo", "build", "--release"])
+
+    if args.mode == "sim":
+        result = run_tests(args, run_sim)
+    elif args.mode == "com":
+        result = run_tests(args, run_com)
+    else:
+        print(f"Invalid mode {args.mode}")
+        result = 1
+
     exit(result)
 
 if __name__ == "__main__":
