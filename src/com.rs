@@ -247,14 +247,13 @@ format_char_hex_end:
                 Ok(())
             }
             ast::Expr::Op { left, right, op } => {
-                self.write_comment(
-                    file,
-                    "rhs evaluated into rax, moving into rbx for next operand",
-                )?;
                 self.compile_expr(right, file)?;
-                self.write_comment(file, "lhs evaluated into rax")?;
-                writeln!(file, "        mov rbx, rax")?;
+                // Push the result onto the stack. So that we can use it after evaluating the rhs.
+                writeln!(file, "        push rax")?;
                 self.compile_expr(left, file)?;
+                // Now rax contains the result of the lhs.
+                // We can pop our previously stored value into rbx
+                writeln!(file, "        pop rbx")?;
                 match op {
                     ast::Op::Sub => {
                         self.write_comment(file, "subtracting rhs rbx from lhs rax into rax")?;
@@ -265,7 +264,7 @@ format_char_hex_end:
                         writeln!(file, "        add rax, rbx")?;
                     }
                     ast::Op::Mul => {
-                        self.write_comment(file,"mul mulitplies rax by the arg and then stores the result in rax and rdx")?;
+                        self.write_comment(file,"mul multiplies rax by the arg and then stores the result in rax and rdx")?;
                         self.write_comment(file, "to account for overflows. We ignore overflows.")?;
                         self.write_comment(file, "lhs is already in rax.")?;
                         writeln!(file, "        mul rbx")?;
