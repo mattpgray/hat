@@ -21,16 +21,48 @@ impl Compiler {
         self.write_comment(file, "; -------------------- begin print intrinsic ---------")?;
         writeln!(file,
 "
-; Takes a uint64 in rax and prints the result using the message buffer
-print_decimal_uint64:
-    xor r8, r8 ; The number of chars in the buffer
+; inputs
+; ------
+; rax: uint64 to format
+; rcx: base
+print_uint64:
     mov rsi, print_buf         ; Set si to the start of the buffer
+    call format_uint64
+    mov rsi, print_buf         ; format_uint64 can change rsi
+
+    mov     rax, 1 ; write syscall
+    mov     rdi, 1 ; stdout
+    mov     rsi, print_buf
+    syscall
+
+    ; Now add a new line.
+    ; TODO: only make one call to write
+    mov rsi, print_buf         ; format_uint64 can change rsi
+    mov byte [rsi], 10
+    mov     rax, 1 ; write syscall
+    mov     rdi, 1 ; stdout
+    mov     rdx, 1 ; len of buf
+    mov     rsi, print_buf
+    syscall
+    ret
+
+; inputs
+; ------
+; rax: uint64 to format
+; rcx: base
+; rsi: buffer pointer - must be big enough. Not bounds checked.
+;      Might be changed through execution.
+;
+; returns
+; ------
+; rdx: The size of the buffer - no newline.
+format_uint64:
+    xor r8, r8 ; The number of chars in the buffer
     mov rbx, rax               ; store a copy in bx
 
 ; Increment until we have taken enough space to store the entire integer.
 ; Do this by dividing by 10 until the result is available;
 increment_message_pointer:
-    mov rcx, 10 ; Cannot div by a constant.
     mov rdx, 0  ; We do not need the extra precision of rdx.
     div rcx
 
@@ -41,100 +73,65 @@ increment_message_pointer:
     jne increment_message_pointer
 
 fill_buffer_uint64:
-    ; If we reach here, we have rsi pointing to the amount we need for the num and 
-    ; rax == 0.
-    ; Store the newline.
-    inc r8
-    mov byte [rsi], 10 ;
     dec rsi
 
     ; We need the number again
     mov rax, rbx
 
 add_one_char_uint64:
-    mov rcx, 10 ; Cannot div by a constant.
     mov rdx, 0  ; We do not need the extra precision of rdx.
-    div rcx
+    div rcx ; rcx has the base
 
-    ; rdx stores the remainer of the devision.
-    add rdx, 30h         ; 0x30 ('0')
-    ; dl 8 bit portion of rdx
-    mov byte [rsi], dl
+    cmp rcx, 16
+    je base_selection_hex
+
+base_selection_decimal:
+    call format_char_decimal
+    jmp base_selection_end
+
+base_selection_hex:
+    call format_char_hex
+    jmp base_selection_end
+
+base_selection_end:
+
     dec rsi
 
     ; We are done if the result is 0
     cmp rax, 0
     jne add_one_char_uint64
 
-; Call write with buffer already filled.
-do_print_decimal_uint64:
-    mov     rax, 1
-    mov     rdi, 1
-    mov     rdx, 7
-    mov     rsi, print_buf
-    syscall
+; We are done so return the result
+    mov     rdx, r8
+    ret
+
+; Takes value in rdx and inserts decimal char into buffer at rsi
+; Works for all bases < 10
+format_char_decimal:
+    ; rdx stores the remainder of the devision.
+    add rdx, 30h         ; 0x30 ('0')
+    ; dl 8 bit portion of rdx
+    mov byte [rsi], dl
+    ret
+
+; Takes value in rdx and inserts hex char into buffer at rsi
+format_char_hex:
+    cmp rdx, 9
+    jg format_char_hex_greater_than_9
+    call format_char_decimal
+    jmp format_char_hex_end
+
+format_char_hex_greater_than_9:
+    ; num + 'a' - 10
+    add rdx, 61h         ; or 0x61 ('a')
+    sub rdx, 10
+    mov byte [rsi], dl
+
+format_char_hex_end:
     ret
 "
             )?;
         self.write_comment(file, "; -------------------- end print intrinsic -----------")?;
-        self.write_comment(file, "; -------------------- begin print_hex intrinsic -----")?;
-        writeln!(file,
-"
-; The int to print is stored in rax
-print_hex_uint64:
-    xor rdx, rdx               ; The number of characters in the buffer
-    mov rsi, print_buf         ; si points to the target buffer
-    mov rbx, rax               ; store a copy in bx
-
-    cmp rax, 0
-    jne  start_strip_leading_zeros
-    ; Special case for 0
-    mov byte [rsi], 030h
-    inc rsi
-    inc rdx
-    jmp done_conversion
-
-strip_leading_zeros:
-    shl rbx, 4                      ; get the next part
-
-start_strip_leading_zeros:
-    mov rax, rbx          ; load the number into ax
-    shr rax, 60           ; grap the last byte
-    jz strip_leading_zeros ; if this is zero then keep stripping. Otherwise continue to printing below
-
-convert_loop:
-    mov rax, rbx          ; load the number into ax
-    shr rax, 60           ; grab the last byte
-
-    cmp rax, 9h          ; check what we should add
-    jg  greater_than_9
-    add rax, 30h         ; 0x30 ('0')
-    jmp converted
-
-greater_than_9:
-    ; num + 'a' - 10
-    add rax, 61h         ; or 0x61 ('a')
-    sub rax, 10
-
-converted:
-    mov [rsi], rax
-    inc rsi
-    inc rdx
-    shl rbx, 4           ; get the next part
-    jnz convert_loop
-
-done_conversion:
-    mov byte [rsi], 10 ; new line
-    inc rdx
-
-    mov     rax, 1
-    mov     rdi, 1
-    mov     rsi, print_buf
-    syscall
-    ret
-"
-                 )?;
-        self.write_comment(file, "; -------------------- end print_hex intrinsic -------")?;
         Ok(())
     }
 
@@ -276,12 +273,14 @@ done_conversion:
             "print" => {
                 assert!(exprs.len() == 1, "unexpected number of arguments");
                 self.compile_expr(&exprs[0], file)?;
-                writeln!(file, "        call print_decimal_uint64")?;
+                writeln!(file, "        mov rcx, 10")?; // The base
+                writeln!(file, "        call print_uint64")?;
             }
             "print_hex" => {
                 assert!(exprs.len() == 1, "unexpected number of arguments");
                 self.compile_expr(&exprs[0], file)?;
-                writeln!(file, "        call print_hex_uint64")?;
+                writeln!(file, "        mov rcx, 16")?; // The base
+                writeln!(file, "        call print_uint64")?;
             }
             // This willbe caught during type checking eventually. No need for a good error now.
             _ => panic!("unknown intrinsic: {}", name),
