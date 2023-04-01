@@ -129,7 +129,6 @@ impl Compiler {
     fn compile_expr(&self, expr: &ast::Expr, file: &mut File) -> Result<(), CompileError> {
         match expr {
             ast::Expr::IntLiteral(num) => {
-                let num = hex_num(num.to_owned());
                 writeln!(file, "        mov rax, {}", num)?;
                 Ok(())
             }
@@ -137,11 +136,55 @@ impl Compiler {
                 self.compile_interinsic_call(name, exprs, file)
             }
             ast::Expr::Word(_) => todo!(),
-            ast::Expr::Op { left, right, op } => todo!(),
-            ast::Expr::BracketExpr(_) => todo!(),
+            ast::Expr::Op { left, right, op } => {
+                self.write_comment(
+                    file,
+                    "rhs evaluated into rax, moving into rbx for next operand",
+                )?;
+                self.compile_expr(right, file)?;
+                self.write_comment(file, "lhs evaluated into rax")?;
+                writeln!(file, "        mov rbx, rax")?;
+                self.compile_expr(left, file)?;
+                match op {
+                    ast::Op::Sub => {
+                        self.write_comment(file, "subtracting rhs rbx from lhs rax into rax")?;
+                        writeln!(file, "        sub rax, rbx")?;
+                    }
+                    ast::Op::Add => {
+                        self.write_comment(file, "adding lhs rax for rhs rbx into rax")?;
+                        writeln!(file, "        add rax, rbx")?;
+                    }
+                    ast::Op::Mul => {
+                        self.write_comment(file,"mul mulitplies rax by the arg and then stores the result in rax and rdx")?;
+                        self.write_comment(file, "to account for overflows. We ignore overflows.")?;
+                        self.write_comment(file, "lhs is already in rax.")?;
+                        writeln!(file, "        mul rbx")?;
+                    }
+                    ast::Op::Div => {
+                        self.write_comment(
+                            file,
+                            "div divides the dividend rdx:rax by the argument and stores the",
+                        )?;
+                        self.write_comment(file, "resulting quotient in rax and remainder in rdx")?;
+                        self.write_comment(file,"We already have the lhs in rax, so we set rdx to zero as we do not need it.")?;
+                        writeln!(file, "        mov rdx, 0")?;
+                        writeln!(file, "        div rbx")?;
+                    }
+                    ast::Op::Gt => todo!(),
+                    ast::Op::Lt => todo!(),
+                }
+                Ok(())
+            }
+            ast::Expr::BracketExpr(expr) => self.compile_expr(expr, file),
             ast::Expr::If { cond, then, else_ } => todo!(),
             ast::Expr::Block(_) => todo!(),
         }
+    }
+
+    fn write_comment(&self, file: &mut File, msg: &str) -> Result<(), CompileError> {
+        write!(file, "; ")?;
+        writeln!(file, "{}", msg)?;
+        Ok(())
     }
 
     fn compile_stmt(&self, stmt: &ast::Stmt, file: &mut File) -> Result<(), CompileError> {
