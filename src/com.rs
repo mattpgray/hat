@@ -36,20 +36,17 @@ print_uint64:
     call format_uint64
     mov rsi, print_buf         ; format_uint64 can change rsi
 
+    ; Add the newline at the end of the buf
+    mov rbx, rdx
+    add rbx, rsi
+    mov byte [rbx], 10
+    inc rdx
+    ; Call write syscall
     mov     rax, 1 ; write syscall
     mov     rdi, 1 ; stdout
     mov     rsi, print_buf
     syscall
 
-    ; Now add a new line.
-    ; TODO: only make one call to write
-    mov rsi, print_buf         ; format_uint64 can change rsi
-    mov byte [rsi], 10
-    mov     rax, 1 ; write syscall
-    mov     rdi, 1 ; stdout
-    mov     rdx, 1 ; len of buf
-    mov     rsi, print_buf
-    syscall
     ret
 
 ; inputs
