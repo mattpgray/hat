@@ -177,11 +177,25 @@ impl Compiler {
             }
             ast::Expr::BracketExpr(expr) => self.compile_expr(expr, file),
             ast::Expr::If { cond, then, else_ } => todo!(),
-            ast::Expr::Block(_) => todo!(),
+            ast::Expr::Block(block) => {
+                self.write_comment(file, "Beginning block")?;
+                for stmt in &block.body {
+                    self.compile_stmt(stmt, file)?;
+                }
+                if let Some(ret_expr) = &block.ret_expr {
+                    self.write_comment(
+                        file,
+                        "Block return expression.",
+                    )?;
+                    self.compile_expr(ret_expr, file)?;
+                }
+                Ok(())
+            }
         }
     }
 
     fn write_comment(&self, file: &mut File, msg: &str) -> Result<(), CompileError> {
+        // TODO: Line numbers. Pass trait into write comment what has file name and number.
         write!(file, "; ")?;
         writeln!(file, "{}", msg)?;
         Ok(())
