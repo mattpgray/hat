@@ -3,4 +3,13 @@ proc main() {
     #print(if 0 { 1 } else { 2 });
     #print({ 3 });
     // TODO: loops do not work at the moment. Should they?
+    // Test deeply nested expressions.
+    // There are 44 '1's here
+    // Theese will all be evaluated to be on the rhs of the ast
+    #print(1+2+3+4+5+6+7+8+9+10+11+12+13+14);
+    // This nests them on the lhs
+    // There are only 28 '1's here
+    #print((((((((((((((1+2)+3)+4)+5)+6)+7)+8)+9)+10)+11)+12)+13)+14));
+    // A mixture.
+    #print((((1+(2+(3+(4+(5+6)+7)+8)+9)+10)+11)+(12+13))+14);
 }
