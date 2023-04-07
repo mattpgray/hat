@@ -1,0 +1,4 @@
+inject "./lib2.hat";
+
+var lib_var = 1;
+

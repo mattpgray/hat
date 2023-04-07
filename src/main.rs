@@ -5,6 +5,8 @@ use std::env;
 use std::process;
 use std::process::exit;
 
+use lexer::SyntaxError;
+
 mod ast;
 mod com;
 mod lexer;
@@ -75,9 +77,14 @@ fn handle_compile_err(err: com::CompileError) -> ! {
     exit(1);
 }
 
+fn handle_syntax_err(err: SyntaxError) -> ! {
+         eprintln!("{}: syntax error: {}", err.loc(), err);
+         exit(1);
+}
+
 fn handle_ast_err(err: ast::ASTError) -> ! {
     match err {
-        ast::ASTError::SyntaxError(err) => eprintln!("{}: syntax error: {}", err.loc(), err),
+        ast::ASTError::SyntaxError(err) => handle_syntax_err(err),
         ast::ASTError::InvalidFile(file_path, err) => {
             eprintln!("could not open file {file_path}, {err}")
         }
@@ -118,16 +125,14 @@ fn main() {
                 exit(1);
             });
             loop {
-                let tok = l.next();
-                match tok.kind {
-                    lexer::TokenKind::EndOfFile => break,
-                    lexer::TokenKind::Invalid => {
-                        eprintln!("{}: invalid token: {}", tok.loc, tok.text);
-                        exit(1);
-                    }
-                    _ => {
-                        println!("{}: {}, {}", tok.loc, tok.kind, tok.text);
-                    }
+                match l.next() {
+                    Ok(tok) => match tok.kind {
+                        lexer::TokenKind::EndOfFile => break,
+                        _ => {
+                            println!("{}: {}, {}", tok.loc, tok.kind, tok.text);
+                        }
+                    },
+                    Err(err) => handle_syntax_err(err)
                 }
             }
         }

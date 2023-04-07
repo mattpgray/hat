@@ -1,6 +1,71 @@
 use std::fmt;
 use std::fs;
 
+#[derive(Debug)]
+pub enum SyntaxError {
+    InvalidToken(Loc, char),
+    UnclosedStringLiteral(Loc),
+    UnexpectedToken {
+        loc: Loc,
+        found: TokenKind,
+        want: Vec<TokenKind>,
+    },
+    UnexectedEOF(Loc),
+    UnmatchedBracket(Loc, TokenKind),
+    InvalidInjection(Loc, String, std::io::Error),
+}
+
+impl SyntaxError {
+    pub fn loc(&self) -> &Loc {
+        match self {
+            SyntaxError::InvalidToken(loc, _)
+            | SyntaxError::UnexpectedToken {
+                loc,
+                found: _,
+                want: _,
+            }
+            | SyntaxError::UnexectedEOF(loc)
+            | SyntaxError::UnclosedStringLiteral(loc)
+            | SyntaxError::InvalidInjection(loc, _, _)
+            | SyntaxError::UnmatchedBracket(loc, _) => loc,
+        }
+    }
+}
+
+impl fmt::Display for SyntaxError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            SyntaxError::InvalidToken(_, text) => write!(f, "invalid token {}", text),
+            SyntaxError::UnexpectedToken {
+                loc: _,
+                found,
+                want,
+            } => {
+                assert!(!want.is_empty());
+
+                let mut s = String::new();
+                s.push_str(&format!("{}", want[0]));
+                if want.len() > 1 {
+                    for w in want.iter().take(want.len() - 1).skip(1) {
+                        s.push_str(&format!(", {}", w));
+                    }
+                    s.push_str(&format!(" or {}", want[want.len() - 1]));
+                }
+                write!(f, "unexpected token: {}, expected {}", found, s)
+            }
+            SyntaxError::UnexectedEOF(_) => {
+                write!(f, "unexpected end of file")
+            }
+            SyntaxError::UnmatchedBracket(_, kind) => {
+                write!(f, "unmatched bracket: {}", kind)
+            }
+            SyntaxError::UnclosedStringLiteral(_) => write!(f, "string literal is not terminated"),
+            SyntaxError::InvalidInjection(_, file_path, err) => {
+                write!(f, "could not read injected file {file_path}, {err}")
+            }
+        }
+    }
+}
 #[derive(Debug, Clone)]
 pub struct Loc {
     file_path: String,
@@ -50,6 +115,7 @@ pub enum TokenKind {
 
     // Literals
     IntLiteral,
+    StringLiteral,
     Word,
 
     // Keywords
@@ -58,9 +124,9 @@ pub enum TokenKind {
     Else,
     Var,
     While,
+    Inject,
 
     // Terminators
-    Invalid,
     EndOfFile,
 }
 
@@ -82,13 +148,14 @@ impl fmt::Display for TokenKind {
             TokenKind::RAngleBracket => write!(f, ">"),
             TokenKind::LAngleBracket => write!(f, "<"),
             TokenKind::IntLiteral => write!(f, "int literal"),
+            TokenKind::StringLiteral => write!(f, "string literal"),
             TokenKind::Word => write!(f, "word"),
             TokenKind::Proc => write!(f, "proc"),
             TokenKind::If => write!(f, "if"),
             TokenKind::Var => write!(f, "var"),
             TokenKind::Else => write!(f, "else"),
             TokenKind::While => write!(f, "while"),
-            TokenKind::Invalid => write!(f, "invalid"),
+            TokenKind::Inject => write!(f, "inject"),
             TokenKind::EndOfFile => write!(f, "EOF"),
         }
     }
@@ -102,6 +169,7 @@ impl TokenKind {
             "else" => Some(TokenKind::Else),
             "var" => Some(TokenKind::Var),
             "while" => Some(TokenKind::While),
+            "inject" => Some(TokenKind::Inject),
             _ => None,
         }
     }
@@ -150,19 +218,24 @@ impl Lexer {
         }
     }
 
-    pub fn peek(&mut self) -> &Token {
+    pub fn peek(&mut self) -> Result<&Token, SyntaxError> {
         let tok = match self.peeked {
             Some(ref t) => t,
             None => {
-                let t = self.read_token();
+                let t = self.read_token()?;
                 self.peeked.insert(t)
             }
         };
-        tok
+        Ok(tok)
     }
 
-    pub fn next(&mut self) -> Token {
-        self.peeked.take().unwrap_or_else(|| self.read_token())
+    pub fn next(&mut self) -> Result<Token, SyntaxError> {
+        let peeked = self.peeked.take();
+        if let Some(tok) = peeked {
+            Ok(tok)
+        } else {
+            self.read_token()
+        }
     }
 
     fn trim_whitespace(&mut self) {
@@ -223,118 +296,142 @@ impl Lexer {
         }
     }
 
-    fn read_token(&mut self) -> Token {
+    fn read_token(&mut self) -> Result<Token, SyntaxError> {
         self.trim_left();
         if self.is_empty() {
-            return Token {
+            return Ok(Token {
                 kind: TokenKind::EndOfFile,
                 loc: self.loc(),
                 text: String::new(),
-            };
+            });
         }
         let loc = self.loc();
         let c = self.chop_char();
         match c {
-            '{' => Token {
+            '{' => Ok(Token {
                 kind: TokenKind::OpenCurly,
                 loc,
                 text: c.to_string(),
-            },
-            '}' => Token {
+            }),
+            '}' => Ok(Token {
                 kind: TokenKind::CloseCurly,
                 loc,
                 text: c.to_string(),
-            },
-            '(' => Token {
+            }),
+            '(' => Ok(Token {
                 kind: TokenKind::OpenParen,
                 loc,
                 text: c.to_string(),
-            },
-            ')' => Token {
+            }),
+            ')' => Ok(Token {
                 kind: TokenKind::CloseParen,
                 loc,
                 text: c.to_string(),
-            },
-            ';' => Token {
+            }),
+            ';' => Ok(Token {
                 kind: TokenKind::SemiColon,
                 loc,
                 text: c.to_string(),
-            },
-            ',' => Token {
+            }),
+            ',' => Ok(Token {
                 kind: TokenKind::Comma,
                 loc,
                 text: c.to_string(),
-            },
-            '#' => Token {
+            }),
+            '#' => Ok(Token {
                 kind: TokenKind::Hash,
                 loc,
                 text: c.to_string(),
-            },
-            '=' => Token {
+            }),
+            '=' => Ok(Token {
                 kind: TokenKind::Eq,
                 loc,
                 text: c.to_string(),
-            },
-            '-' => Token {
+            }),
+            '-' => Ok(Token {
                 kind: TokenKind::Minus,
                 loc,
                 text: c.to_string(),
-            },
-            '+' => Token {
+            }),
+            '+' => Ok(Token {
                 kind: TokenKind::Add,
                 loc,
                 text: c.to_string(),
-            },
-            '*' => Token {
+            }),
+            '*' => Ok(Token {
                 kind: TokenKind::Mul,
                 loc,
                 text: c.to_string(),
-            },
-            '/' => Token {
+            }),
+            '/' => Ok(Token {
                 kind: TokenKind::Div,
                 loc,
                 text: c.to_string(),
-            },
-            '>' => Token {
+            }),
+            '>' => Ok(Token {
                 kind: TokenKind::RAngleBracket,
                 loc,
                 text: c.to_string(),
-            },
-            '<' => Token {
+            }),
+            '<' => Ok(Token {
                 kind: TokenKind::LAngleBracket,
                 loc,
                 text: c.to_string(),
-            },
+            }),
             '0'..='9' => {
                 let mut text = c.to_string();
                 self.append_predicate(&mut text, char_is_numeric);
-                Token {
+                Ok(Token {
                     kind: TokenKind::IntLiteral,
                     loc,
                     text,
-                }
+                })
             }
             'a'..='z' | 'A'..='Z' | '_' => {
                 let mut word = c.to_string();
                 self.append_predicate(&mut word, char_is_word);
                 match TokenKind::from_keyword(&word) {
-                    Some(kind) => Token {
+                    Some(kind) => Ok(Token {
                         kind,
                         loc,
                         text: word,
-                    },
-                    None => Token {
+                    }),
+                    None => Ok(Token {
                         kind: TokenKind::Word,
                         loc,
                         text: word,
-                    },
+                    }),
                 }
             }
-            _ => Token {
-                kind: TokenKind::Invalid,
-                loc,
-                text: c.to_string(),
-            },
+            '"' => {
+                // Simple parsing of the string with ignoring escape sequences. Parsing this into
+                // bytes correctly is done in the ast parser.
+                let mut st = c.to_string();
+                let mut in_escape = false;
+                let mut done = false;
+                while self.is_not_empty() {
+                    let c = self.chop_char();
+                    st.push(c);
+                    if in_escape {
+                        in_escape = false;
+                    } else if c == '\\' {
+                        in_escape = true;
+                    } else if c == '"' {
+                        done = true;
+                        break;
+                    }
+                }
+                if !done {
+                    Err(SyntaxError::UnclosedStringLiteral(loc))
+                } else {
+                    Ok(Token {
+                        kind: TokenKind::StringLiteral,
+                        loc,
+                        text: st,
+                    })
+                }
+            }
+            _ => Err(SyntaxError::InvalidToken(loc, c)),
         }
     }
 }

@@ -1,5 +1,6 @@
+use std::path::{Path, PathBuf};
+
 use super::lexer::*;
-use std::fmt;
 
 #[derive(Debug)]
 pub enum ASTError {
@@ -11,64 +12,6 @@ pub enum ASTError {
 impl From<SyntaxError> for ASTError {
     fn from(err: SyntaxError) -> Self {
         ASTError::SyntaxError(err)
-    }
-}
-
-#[derive(Debug)]
-pub enum SyntaxError {
-    InvalidToken(Loc, String),
-    UnexpectedToken {
-        loc: Loc,
-        found: TokenKind,
-        want: Vec<TokenKind>,
-    },
-    UnexectedEOF(Loc),
-    UnmatchedBracket(Loc, TokenKind),
-}
-
-impl SyntaxError {
-    pub fn loc(&self) -> &Loc {
-        match self {
-            SyntaxError::InvalidToken(loc, _)
-            | SyntaxError::UnexpectedToken {
-                loc,
-                found: _,
-                want: _,
-            }
-            | SyntaxError::UnexectedEOF(loc)
-            | SyntaxError::UnmatchedBracket(loc, _) => loc,
-        }
-    }
-}
-
-impl fmt::Display for SyntaxError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            SyntaxError::InvalidToken(_, text) => write!(f, "invalid token {}", text),
-            SyntaxError::UnexpectedToken {
-                loc: _,
-                found,
-                want,
-            } => {
-                assert!(!want.is_empty());
-
-                let mut s = String::new();
-                s.push_str(&format!("{}", want[0]));
-                if want.len() > 1 {
-                    for w in want.iter().take(want.len() - 1).skip(1) {
-                        s.push_str(&format!(", {}", w));
-                    }
-                    s.push_str(&format!(" or {}", want[want.len() - 1]));
-                }
-                write!(f, "unexpected token: {}, expected {}", found, s)
-            }
-            SyntaxError::UnexectedEOF(_) => {
-                write!(f, "unexpected end of file")
-            }
-            SyntaxError::UnmatchedBracket(_, kind) => {
-                write!(f, "unmatched bracket: {}", kind)
-            }
-        }
     }
 }
 
@@ -177,30 +120,30 @@ impl Expr {
 
     fn parse(l: &mut Lexer) -> Result<Self, SyntaxError> {
         let expr = Self::parse_one(l)?;
-        let tok = l.peek();
+        let tok = l.peek()?;
         match tok.kind {
             TokenKind::Minus => {
-                l.next();
+                l.next()?;
                 Self::parse_op(l, expr, Op::Sub)
             }
             TokenKind::Add => {
-                l.next();
+                l.next()?;
                 Self::parse_op(l, expr, Op::Add)
             }
             TokenKind::Mul => {
-                l.next();
+                l.next()?;
                 Self::parse_op(l, expr, Op::Mul)
             }
             TokenKind::Div => {
-                l.next();
+                l.next()?;
                 Self::parse_op(l, expr, Op::Div)
             }
             TokenKind::RAngleBracket => {
-                l.next();
+                l.next()?;
                 Self::parse_op(l, expr, Op::Gt)
             }
             TokenKind::LAngleBracket => {
-                l.next();
+                l.next()?;
                 Self::parse_op(l, expr, Op::Lt)
             }
             TokenKind::OpenCurly
@@ -212,47 +155,48 @@ impl Expr {
             | TokenKind::Comma
             | TokenKind::Eq
             | TokenKind::IntLiteral
+            | TokenKind::StringLiteral
             | TokenKind::Word
             | TokenKind::Proc
             | TokenKind::If
             | TokenKind::Else
             | TokenKind::Var
             | TokenKind::While
-            | TokenKind::Invalid
+            | TokenKind::Inject
             | TokenKind::EndOfFile => Ok(expr),
         }
     }
 
     fn parse_one(l: &mut Lexer) -> Result<Self, SyntaxError> {
-        let tok = l.peek();
+        let tok = l.peek()?;
         match tok.kind {
             TokenKind::Word => {
-                let tok = l.next();
+                let tok = l.next()?;
                 Self::parse_word_expr(l, &tok)
             }
             TokenKind::Hash => {
-                l.next();
+                l.next()?;
                 let name = expect_token_kind(l, TokenKind::Word)?.text;
                 expect_token_kind(l, TokenKind::OpenParen)?;
                 let mut args = Vec::new();
                 loop {
-                    let tok = l.peek();
+                    let tok = l.peek()?;
                     match tok.kind {
                         TokenKind::CloseParen => {
-                            l.next();
+                            l.next()?;
                             break;
                         }
                         _ => {
                             args.push(Self::parse(l)?);
                         }
                     }
-                    let tok = l.peek();
+                    let tok = l.peek()?;
                     match tok.kind {
                         TokenKind::Comma => {
-                            l.next();
+                            l.next()?;
                         }
                         TokenKind::CloseParen => {
-                            l.next();
+                            l.next()?;
                             break;
                         }
                         _ => {
@@ -267,7 +211,7 @@ impl Expr {
                 Ok(Expr::IntrinsicCall(name, args))
             }
             TokenKind::Minus => {
-                l.next();
+                l.next()?;
                 let expr = Expr::parse(l)?;
                 Ok(Expr::Op {
                     left: Box::new(Expr::IntLiteral(0)),
@@ -276,11 +220,14 @@ impl Expr {
                 })
             }
             TokenKind::IntLiteral => {
-                let tok = l.next();
+                let tok = l.next()?;
                 Ok(Expr::IntLiteral(Self::parse_int_literal(tok.text)))
             }
+            TokenKind::StringLiteral => {
+                todo!("string literals in expressions is not supported yet")
+            }
             TokenKind::OpenParen => {
-                l.next();
+                l.next()?;
                 let expr = Expr::parse(l)?;
                 expect_token_kind(l, TokenKind::CloseParen)?;
                 Ok(Expr::BracketExpr(Box::new(expr)))
@@ -288,7 +235,6 @@ impl Expr {
             TokenKind::OpenCurly => Ok(Expr::Block(Box::new(Self::parse_block(l)?))),
             TokenKind::If => Self::parse_if(l),
             TokenKind::EndOfFile
-            | TokenKind::Invalid
             | TokenKind::CloseCurly
             | TokenKind::CloseParen
             | TokenKind::SemiColon
@@ -300,6 +246,7 @@ impl Expr {
             | TokenKind::Add
             | TokenKind::Mul
             | TokenKind::Div
+            | TokenKind::Inject
             | TokenKind::LAngleBracket
             | TokenKind::RAngleBracket
             | TokenKind::Comma => Err(unexpected_token(
@@ -354,7 +301,7 @@ impl Expr {
 
     fn parse_word_expr(_l: &mut Lexer, word_tok: &Token) -> Result<Self, SyntaxError> {
         assert!(word_tok.kind == TokenKind::Word, "Expected word token");
-        let tok = _l.peek();
+        let tok = _l.peek()?;
         match tok.kind {
             TokenKind::OpenParen => {
                 todo!(
@@ -380,11 +327,11 @@ impl Expr {
         let cond = Box::new(Expr::parse(l)?);
         let then = Box::new(Self::parse_block(l)?);
 
-        let tok = l.peek();
+        let tok = l.peek()?;
         match tok.kind {
             TokenKind::Else => {
-                l.next();
-                let tok = l.peek();
+                l.next()?;
+                let tok = l.peek()?;
                 match tok.kind {
                     TokenKind::If => {
                         let else_ = Some(Box::new(Self::parse_if(l)?));
@@ -411,10 +358,10 @@ impl Expr {
         expect_token_kind(l, TokenKind::OpenCurly)?;
         let mut stmts = Vec::new();
         loop {
-            let tok = l.peek();
+            let tok = l.peek()?;
             match tok.kind {
                 TokenKind::CloseCurly => {
-                    l.next();
+                    l.next()?;
                     break;
                 }
                 TokenKind::EndOfFile => {
@@ -442,9 +389,9 @@ impl Expr {
                             // If and block do not need to end with a semicolon
                             match expr {
                                 Expr::If { .. } | Expr::Block(..) => {
-                                    let tok = l.peek();
+                                    let tok = l.peek()?;
                                     if tok.kind == TokenKind::CloseCurly {
-                                        l.next();
+                                        l.next()?;
                                         // If the internal has a return expression, so do we.
                                         if expr.has_return() {
                                             return Ok(Block {
@@ -463,7 +410,7 @@ impl Expr {
                                     }
                                 }
                                 _ => {
-                                    let tok = l.next();
+                                    let tok = l.next()?;
                                     match tok.kind {
                                         TokenKind::SemiColon => {
                                             stmts.push(stmt);
@@ -496,15 +443,15 @@ impl Expr {
 
     // Callers of this function will need to validate the semicolons.
     fn parse_stmt_unsafe(l: &mut Lexer) -> Result<Stmt, SyntaxError> {
-        let tok = l.peek().clone();
+        let tok = l.peek()?.clone();
 
         match tok.kind {
             TokenKind::While => Ok(Stmt::parse_while(l)?),
             TokenKind::Word => {
-                l.next();
-                let p_tok = l.peek();
+                l.next()?;
+                let p_tok = l.peek()?;
                 if p_tok.kind == TokenKind::Eq {
-                    l.next();
+                    l.next()?;
                     let assign = Stmt::Assign(tok.text, Expr::parse(l)?);
                     Ok(assign)
                 } else {
@@ -524,32 +471,6 @@ pub enum Decl {
 }
 
 impl Decl {
-    pub fn parse(l: &mut Lexer) -> Result<Vec<Self>, SyntaxError> {
-        let mut decls = Vec::new();
-        loop {
-            let tok = l.peek();
-            match tok.kind {
-                TokenKind::EndOfFile => break,
-                TokenKind::Proc => {
-                    let proc = Self::parse_proc(l)?;
-                    decls.push(Decl::Proc(proc));
-                }
-                TokenKind::Var => {
-                    let var = Self::parse_var(l)?;
-                    decls.push(Decl::Var(var));
-                }
-                _ => {
-                    return Err(SyntaxError::UnexpectedToken {
-                        loc: tok.loc.clone(),
-                        found: tok.kind.clone(),
-                        want: vec![TokenKind::Proc, TokenKind::Var, TokenKind::EndOfFile],
-                    })
-                }
-            }
-        }
-        Ok(decls)
-    }
-
     fn parse_proc(l: &mut Lexer) -> Result<Proc, SyntaxError> {
         expect_token_kind(l, TokenKind::Proc)?;
         let name = expect_token_kind(l, TokenKind::Word)?.text;
@@ -571,7 +492,7 @@ impl Decl {
         expect_token_kind(l, TokenKind::Var)?;
         let name = expect_token_kind(l, TokenKind::Word)?.text;
 
-        let tok = l.next();
+        let tok = l.next()?;
         match tok.kind {
             TokenKind::Eq => {
                 // TODO: Allow arbitrary expressions.
@@ -599,21 +520,122 @@ pub struct Ast {
 
 impl Ast {
     pub fn from_file(file_path: String) -> Result<Self, ASTError> {
-        let mut lexer = Lexer::from_file(file_path.clone()).map_err(|err| ASTError::InvalidFile(file_path, err))?;
-        Ok(Ast{
-            decls: Decl::parse(&mut lexer)?,
-        })
+        let mut lexer = Lexer::from_file(file_path.clone())
+            .map_err(|err| ASTError::InvalidFile(file_path.clone(), err))?;
+        let mut decls = Vec::new();
+        Self::append_decls(&mut lexer, &file_path, &mut decls)?;
+        Ok(Ast { decls })
+    }
+
+    fn append_decls(l: &mut Lexer, current_file: &String, decls: &mut Vec<Decl>) -> Result<(), SyntaxError> {
+        // First we parse the injections.
+        loop {
+            let tok = l.peek()?;
+            if tok.kind != TokenKind::Inject {
+                break;
+            }
+            l.next()?;
+            let tok = expect_token_kind(l, TokenKind::StringLiteral)?;
+            let injected_file = parse_string_literal(&tok)?;
+
+            let injected_file = join_rel_paths(current_file, &injected_file);
+            let mut injected_lexer = Lexer::from_file(injected_file.clone())
+                .map_err(|err| SyntaxError::InvalidInjection(tok.loc, injected_file.clone(), err))?;
+
+            Self::append_decls(&mut injected_lexer, &injected_file, decls)?;
+            let _ = expect_token_kind(l, TokenKind::SemiColon)?;
+        }
+
+        // Then we parse the declarations.
+        loop {
+            let tok = l.peek()?;
+            match tok.kind {
+                TokenKind::EndOfFile => break,
+                TokenKind::Proc => {
+                    let proc = Decl::parse_proc(l)?;
+                    decls.push(Decl::Proc(proc));
+                }
+                TokenKind::Var => {
+                    let var = Decl::parse_var(l)?;
+                    decls.push(Decl::Var(var));
+                }
+                _ => {
+                    return Err(SyntaxError::UnexpectedToken {
+                        loc: tok.loc.clone(),
+                        found: tok.kind.clone(),
+                        want: vec![TokenKind::Proc, TokenKind::Var, TokenKind::EndOfFile],
+                    })
+                }
+            }
+        }
+        Ok(())
     }
 }
 
+fn parse_string_literal(quoted_tok: &Token) -> Result<String, SyntaxError> {
+    let mut iterator = quoted_tok.text.chars();
+    let first = iterator.next().expect("Should not be empty");
+    assert!(first == '"', "Should start with \"");
+
+    let mut s = String::new();
+    while let Some(c) = iterator.next() {
+        if c == '\\' {
+            let c = iterator
+                .next()
+                .expect("The escape sequence should not be at the end of the string");
+            match c {
+                _ => {
+                    todo!("escape sequence \\{c} is not supported yet");
+                }
+            }
+        } else if c == '"' {
+            assert!(
+                iterator.next().is_none(),
+                "The only unescaped \" should be at the end of the string"
+            );
+        } else {
+            s.push(c)
+        }
+    }
+
+    Ok(s)
+}
+
+// join two relative paths and return a new relative path
+fn join_rel_paths(a: &String, b: &String) -> String {
+    let mut a_path = PathBuf::from(a);
+    a_path.pop(); // First pop off the file name
+    let b_components = Path::new(b).components();
+    for c in b_components {
+        match c{
+            // "."
+            std::path::Component::CurDir => { } // nop
+            // ".."
+            std::path::Component::ParentDir => {
+                if !a_path.pop() {
+                    todo!("Better error for invalid path")
+                }
+            },
+            // "part"
+            std::path::Component::Normal(p) => {
+                a_path = a_path.join(p);
+            }
+            std::path::Component::Prefix(_) 
+            | std::path::Component::RootDir => todo!("Return better error for use of absolute paths")
+        }
+    }
+    // ew
+    a_path.as_path().to_str().unwrap().to_owned()
+}
+
 fn expect_token_kind(l: &mut Lexer, kind: TokenKind) -> Result<Token, SyntaxError> {
-    let tok = l.next();
+    let tok = l.next()?;
     token_expected_kind(&tok, kind)?;
     Ok(tok)
 }
 
 fn peek_expect_token_kind(l: &mut Lexer, kind: TokenKind) -> Result<&Token, SyntaxError> {
-    let tok = l.peek();
+    let tok = l.peek()?;
     token_expected_kind(tok, kind)?;
     Ok(tok)
 }
@@ -629,7 +651,6 @@ fn token_expected_kind(tok: &Token, kind: TokenKind) -> Result<(), SyntaxError> 
 fn unexpected_token(tok: &Token, want: Vec<TokenKind>) -> SyntaxError {
     match tok.kind.clone() {
         TokenKind::EndOfFile => SyntaxError::UnexectedEOF(tok.loc.clone()),
-        TokenKind::Invalid => SyntaxError::InvalidToken(tok.loc.clone(), tok.text.clone()),
         _ => SyntaxError::UnexpectedToken {
             loc: tok.loc.clone(),
             found: tok.kind.clone(),

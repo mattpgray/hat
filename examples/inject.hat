@@ -1,0 +1,6 @@
+inject "./lib/lib.hat";
+
+proc main() {
+    #print(lib_var);
+    #print(lib2_var);
+}
