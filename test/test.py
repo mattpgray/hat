@@ -44,6 +44,10 @@ def run_sim(file):
 def run_tests(args, runner):
     result = 0
     for file in test_files():
+        if args.update:
+            print(f"Updating test for {file}")
+        else:
+            print(f"Running test for {file}")
         proc_result = runner(file)
         result_dict = {
                 "stdout": proc_result.stdout.decode("utf-8"),

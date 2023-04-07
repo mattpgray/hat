@@ -1,6 +1,23 @@
 use super::ast::*;
 use std::{collections::HashMap, fmt};
 
+pub enum SimulationError {
+    ExecutionError(ExecutionError),
+    AstError(ASTError),
+}
+
+impl From<ASTError> for SimulationError {
+    fn from(err: ASTError) -> Self {
+        SimulationError::AstError(err)
+    }
+}
+
+impl From<ExecutionError> for SimulationError {
+    fn from(err: ExecutionError) -> Self {
+        SimulationError::ExecutionError(err)
+    }
+}
+
 pub enum ExecutionError {
     NoMainProc,
     InvalidExpressionResult {
@@ -33,7 +50,9 @@ impl fmt::Display for ExecutionError {
             }
             ExecutionError::UknownValue(word) => write!(f, "unknown value: '{}'", word),
             ExecutionError::NotSupported(msg) => write!(f, "{}", msg),
-            ExecutionError::InvalidIntrinsic(intrinsic) => write!(f, "invalid intrinsic #{}", intrinsic),
+            ExecutionError::InvalidIntrinsic(intrinsic) => {
+                write!(f, "invalid intrinsic #{}", intrinsic)
+            }
         }
     }
 }
@@ -59,7 +78,8 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn run(&mut self, ast: Ast) -> Result<(), ExecutionError> {
+    pub fn run(&mut self, file_path: String) -> Result<(), SimulationError> {
+        let ast = Ast::from_file(file_path)?;
         for decl in ast.decls.iter() {
             match decl {
                 Decl::Proc(proc) => {
@@ -84,17 +104,19 @@ impl Context {
             .get("main")
             .ok_or(ExecutionError::NoMainProc)?
             .clone();
-        self.run_proc(&main_proc)
+        self.run_proc(&main_proc)?;
+        Ok(())
     }
 
     fn run_proc(&mut self, proc: &Proc) -> Result<(), ExecutionError> {
         self.run_stmts(&proc.body.body)?;
         if proc.body.ret_expr.is_some() {
-            Err(ExecutionError::NotSupported("return expressions in function bodies is not supported".to_string()))
+            Err(ExecutionError::NotSupported(
+                "return expressions in function bodies is not supported".to_string(),
+            ))
         } else {
             Ok(())
         }
-
     }
 
     fn run_stmts(&mut self, stmts: &Vec<Stmt>) -> Result<(), ExecutionError> {
@@ -120,7 +142,7 @@ impl Context {
         if let Some(ret_expr) = &block.ret_expr {
             self.run_expr(ret_expr)
         } else {
-            Ok(ExprResult{results: vec![]})
+            Ok(ExprResult { results: vec![] })
         }
     }
 
@@ -137,7 +159,7 @@ impl Context {
         } else if let Some(else_) = else_ {
             self.run_expr(else_)
         } else {
-            Ok(ExprResult{results: vec![]})
+            Ok(ExprResult { results: vec![] })
         }
     }
 
@@ -147,8 +169,10 @@ impl Context {
         while cond_result.results[0] != 0 {
             self.run_stmts(&body.body)?;
             if body.ret_expr.is_some() {
-                return Err(ExecutionError::NotSupported("return expressions in while bodies is not supported".to_string()))
-            } 
+                return Err(ExecutionError::NotSupported(
+                    "return expressions in while bodies is not supported".to_string(),
+                ));
+            }
             cond_result = self.run_expr(cond)?;
             expect_expr_result(&cond_result, 1)?;
         }
@@ -176,7 +200,7 @@ impl Context {
             Expr::Op { left, right, op } => self.run_op(left, right, op),
             Expr::BracketExpr(expr) => self.run_expr(expr),
             Expr::If { cond, then, else_ } => self.run_if(cond, then, else_),
-            Expr::Block(block)  => self.run_block(block)
+            Expr::Block(block) => self.run_block(block),
         }
     }
 

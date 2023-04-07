@@ -2,6 +2,19 @@ use super::lexer::*;
 use std::fmt;
 
 #[derive(Debug)]
+pub enum ASTError {
+    SyntaxError(SyntaxError),
+    // An invalid file has been provided to the ast.
+    InvalidFile(String, std::io::Error),
+}
+
+impl From<SyntaxError> for ASTError {
+    fn from(err: SyntaxError) -> Self {
+        ASTError::SyntaxError(err)
+    }
+}
+
+#[derive(Debug)]
 pub enum SyntaxError {
     InvalidToken(Loc, String),
     UnexpectedToken {
@@ -80,7 +93,7 @@ pub enum Stmt {
 }
 
 impl Stmt {
-    fn parse_while(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Stmt, SyntaxError> {
+    fn parse_while(l: &mut Lexer) -> Result<Stmt, SyntaxError> {
         expect_token_kind(l, TokenKind::While)?;
         let cond = Expr::parse(l)?;
         let body = Expr::parse_block(l)?;
@@ -162,7 +175,7 @@ impl Expr {
         }
     }
 
-    fn parse(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Self, SyntaxError> {
+    fn parse(l: &mut Lexer) -> Result<Self, SyntaxError> {
         let expr = Self::parse_one(l)?;
         let tok = l.peek();
         match tok.kind {
@@ -210,7 +223,7 @@ impl Expr {
         }
     }
 
-    fn parse_one(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Self, SyntaxError> {
+    fn parse_one(l: &mut Lexer) -> Result<Self, SyntaxError> {
         let tok = l.peek();
         match tok.kind {
             TokenKind::Word => {
@@ -301,11 +314,7 @@ impl Expr {
         }
     }
 
-    fn parse_op(
-        l: &mut Lexer<impl Iterator<Item = char>>,
-        left: Expr,
-        op: Op,
-    ) -> Result<Expr, SyntaxError> {
+    fn parse_op(l: &mut Lexer, left: Expr, op: Op) -> Result<Expr, SyntaxError> {
         let right = Expr::parse(l)?;
         if let Expr::Op { .. } = left {
             todo!("parse_op: case where left is an op is not supported yet. Can this even happen?");
@@ -343,10 +352,7 @@ impl Expr {
         }
     }
 
-    fn parse_word_expr(
-        _l: &mut Lexer<impl Iterator<Item = char>>,
-        word_tok: &Token,
-    ) -> Result<Self, SyntaxError> {
+    fn parse_word_expr(_l: &mut Lexer, word_tok: &Token) -> Result<Self, SyntaxError> {
         assert!(word_tok.kind == TokenKind::Word, "Expected word token");
         let tok = _l.peek();
         match tok.kind {
@@ -369,7 +375,7 @@ impl Expr {
         int_val
     }
 
-    fn parse_if(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Expr, SyntaxError> {
+    fn parse_if(l: &mut Lexer) -> Result<Expr, SyntaxError> {
         expect_token_kind(l, TokenKind::If)?;
         let cond = Box::new(Expr::parse(l)?);
         let then = Box::new(Self::parse_block(l)?);
@@ -401,7 +407,7 @@ impl Expr {
         }
     }
 
-    fn parse_block(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Block, SyntaxError> {
+    fn parse_block(l: &mut Lexer) -> Result<Block, SyntaxError> {
         expect_token_kind(l, TokenKind::OpenCurly)?;
         let mut stmts = Vec::new();
         loop {
@@ -449,11 +455,11 @@ impl Expr {
                                             stmts.push(Stmt::Expr(expr));
                                             return Ok(Block {
                                                 body: stmts,
-                                                ret_expr: None
+                                                ret_expr: None,
                                             });
                                         }
                                     } else {
-                                            stmts.push(Stmt::Expr(expr.clone()));
+                                        stmts.push(Stmt::Expr(expr.clone()));
                                     }
                                 }
                                 _ => {
@@ -489,7 +495,7 @@ impl Expr {
     }
 
     // Callers of this function will need to validate the semicolons.
-    fn parse_stmt_unsafe(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Stmt, SyntaxError> {
+    fn parse_stmt_unsafe(l: &mut Lexer) -> Result<Stmt, SyntaxError> {
         let tok = l.peek().clone();
 
         match tok.kind {
@@ -517,25 +523,20 @@ pub enum Decl {
     Proc(Proc),
 }
 
-#[derive(Debug)]
-pub struct Ast {
-    pub decls: Vec<Decl>,
-}
-
-impl Ast {
-    pub fn parse(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Self, SyntaxError> {
-        let mut ast = Ast { decls: Vec::new() };
+impl Decl {
+    pub fn parse(l: &mut Lexer) -> Result<Vec<Self>, SyntaxError> {
+        let mut decls = Vec::new();
         loop {
             let tok = l.peek();
             match tok.kind {
                 TokenKind::EndOfFile => break,
                 TokenKind::Proc => {
                     let proc = Self::parse_proc(l)?;
-                    ast.decls.push(Decl::Proc(proc));
+                    decls.push(Decl::Proc(proc));
                 }
                 TokenKind::Var => {
                     let var = Self::parse_var(l)?;
-                    ast.decls.push(Decl::Var(var));
+                    decls.push(Decl::Var(var));
                 }
                 _ => {
                     return Err(SyntaxError::UnexpectedToken {
@@ -546,10 +547,10 @@ impl Ast {
                 }
             }
         }
-        Ok(ast)
+        Ok(decls)
     }
 
-    fn parse_proc(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Proc, SyntaxError> {
+    fn parse_proc(l: &mut Lexer) -> Result<Proc, SyntaxError> {
         expect_token_kind(l, TokenKind::Proc)?;
         let name = expect_token_kind(l, TokenKind::Word)?.text;
         expect_token_kind(l, TokenKind::OpenParen)?;
@@ -566,7 +567,7 @@ impl Ast {
         })
     }
 
-    fn parse_var(l: &mut Lexer<impl Iterator<Item = char>>) -> Result<Var, SyntaxError> {
+    fn parse_var(l: &mut Lexer) -> Result<Var, SyntaxError> {
         expect_token_kind(l, TokenKind::Var)?;
         let name = expect_token_kind(l, TokenKind::Word)?.text;
 
@@ -591,19 +592,27 @@ impl Ast {
     }
 }
 
-fn expect_token_kind(
-    l: &mut Lexer<impl Iterator<Item = char>>,
-    kind: TokenKind,
-) -> Result<Token, SyntaxError> {
+#[derive(Debug)]
+pub struct Ast {
+    pub decls: Vec<Decl>,
+}
+
+impl Ast {
+    pub fn from_file(file_path: String) -> Result<Self, ASTError> {
+        let mut lexer = Lexer::from_file(file_path.clone()).map_err(|err| ASTError::InvalidFile(file_path, err))?;
+        Ok(Ast{
+            decls: Decl::parse(&mut lexer)?,
+        })
+    }
+}
+
+fn expect_token_kind(l: &mut Lexer, kind: TokenKind) -> Result<Token, SyntaxError> {
     let tok = l.next();
     token_expected_kind(&tok, kind)?;
     Ok(tok)
 }
 
-fn peek_expect_token_kind(
-    l: &mut Lexer<impl Iterator<Item = char>>,
-    kind: TokenKind,
-) -> Result<&Token, SyntaxError> {
+fn peek_expect_token_kind(l: &mut Lexer, kind: TokenKind) -> Result<&Token, SyntaxError> {
     let tok = l.peek();
     token_expected_kind(tok, kind)?;
     Ok(tok)

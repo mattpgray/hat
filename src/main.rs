@@ -1,9 +1,7 @@
-// I do not like code golf
+// I do not like code golfmain
 #![allow(clippy::bool_to_int_with_if)]
 
 use std::env;
-use std::fmt;
-use std::fs;
 use std::process;
 use std::process::exit;
 
@@ -23,50 +21,13 @@ fn usage() {
     println!("    ast   <file>   print the ast for the provided file");
     println!("    sim   <file>   run the provided file interactively");
 }
-
-fn get_file_path_and_data(args: &mut Vec<String>) -> (String, String) {
+fn get_file_path(args: &mut Vec<String>) -> String {
     if args.is_empty() {
         eprintln!("No file provided");
         usage();
         process::exit(1);
     }
-    let file_path: String = args.remove(0);
-    (file_path.clone(), fs::read_to_string(file_path).unwrap())
-}
-
-enum SimulationError {
-    SyntaxError(ast::SyntaxError),
-    ExecutionError(sim::ExecutionError),
-}
-
-impl From<ast::SyntaxError> for SimulationError {
-    fn from(err: ast::SyntaxError) -> Self {
-        SimulationError::SyntaxError(err)
-    }
-}
-
-impl From<sim::ExecutionError> for SimulationError {
-    fn from(err: sim::ExecutionError) -> Self {
-        SimulationError::ExecutionError(err)
-    }
-}
-
-impl fmt::Display for SimulationError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            SimulationError::SyntaxError(e) => write!(f, "{}: syntax error: {}", e.loc(), e),
-            SimulationError::ExecutionError(e) => write!(f, "execution error: {}", e),
-        }
-    }
-}
-
-fn simulate_program(
-    lexer: &mut lexer::Lexer<impl Iterator<Item = char>>,
-) -> Result<(), SimulationError> {
-    let ast = ast::Ast::parse(lexer)?;
-    let mut ctx = sim::Context::default();
-    ctx.run(ast)?;
-    Ok(())
+    args.remove(0)
 }
 
 struct CompileArgs {
@@ -94,7 +55,35 @@ fn parse_compile_args(args: Vec<String>) -> CompileArgs {
     CompileArgs { out_file, in_file }
 }
 
-#[allow(clippy::bool_to_int_with_if)]
+fn handle_simulation_err(err: sim::SimulationError) -> ! {
+    match err {
+        sim::SimulationError::ExecutionError(err) => eprintln!("execution error: {}", err),
+        sim::SimulationError::AstError(err) => handle_ast_err(err),
+    }
+    exit(1);
+}
+
+fn handle_compile_err(err: com::CompileError) -> ! {
+    match err {
+        com::CompileError::CmdError(cmd_err) => eprintln!(
+            "Error running command {}: exit code {}, output: \n{}",
+            cmd_err.name, cmd_err.code, cmd_err.message
+        ),
+        com::CompileError::Io(io_err) => eprintln!("io error: {}", io_err),
+        com::CompileError::AstError(err) => handle_ast_err(err),
+    }
+    exit(1);
+}
+
+fn handle_ast_err(err: ast::ASTError) -> ! {
+    match err {
+        ast::ASTError::SyntaxError(err) => eprintln!("{}: syntax error: {}", err.loc(), err),
+        ast::ASTError::InvalidFile(file_path, err) => {
+            eprintln!("could not open file {file_path}, {err}")
+        }
+    }
+    exit(1);
+}
 
 fn main() {
     let mut args: Vec<String> = env::args().collect();
@@ -108,41 +97,26 @@ fn main() {
     match subcommand.as_str() {
         "com" => {
             let compile_args = parse_compile_args(args);
-            let file_data = fs::read_to_string(&compile_args.in_file).unwrap();
-            let mut l = lexer::Lexer::new(file_data.chars(), compile_args.in_file);
-            let ast = ast::Ast::parse(&mut l).unwrap_or_else(|err| {
-                eprintln!("{}: syntax error: {}", err.loc(), err);
-                exit(1);
-            });
             let mut c = com::Compiler::default();
-            c.compile(compile_args.out_file, &ast).unwrap_or_else(|err| {
-                match err {
-                    com::CompileError::CmdError(cmd_err) => eprintln!(
-                        "Error running command {}: exit code {}, output: \n{}",
-                        cmd_err.name, cmd_err.code, cmd_err.message
-                    ),
-                    com::CompileError::Io(io_err) => eprintln!("io error: {}", io_err),
-                }
-                exit(1);
-            });
+            c.compile(compile_args.in_file, compile_args.out_file)
+                .unwrap_or_else(|err| handle_compile_err(err));
         }
         "ast" => {
-            let (file_path, file_data) = get_file_path_and_data(&mut args);
-            let mut l = lexer::Lexer::new(file_data.chars(), file_path);
-            let ast = ast::Ast::parse(&mut l);
+            let ast = ast::Ast::from_file(get_file_path(&mut args))
+                .unwrap_or_else(|err| handle_ast_err(err));
             println!("{ast:#?}");
         }
         "sim" => {
-            let (file_path, file_data) = get_file_path_and_data(&mut args);
-            let mut l = lexer::Lexer::new(file_data.chars(), file_path);
-            if let Err(err) = simulate_program(&mut l) {
-                eprintln!("{}", err);
-                exit(1);
-            }
+            let mut ctx = sim::Context::default();
+            ctx.run(get_file_path(&mut args))
+                .unwrap_or_else(|err| handle_simulation_err(err));
         }
         "lex" => {
-            let (file_path, file_data) = get_file_path_and_data(&mut args);
-            let mut l = lexer::Lexer::new(file_data.chars(), file_path);
+            let file_path = get_file_path(&mut args);
+            let mut l = lexer::Lexer::from_file(file_path.clone()).unwrap_or_else(|err| {
+                eprintln!("could not open file {file_path}, {err}");
+                exit(1);
+            });
             loop {
                 let tok = l.next();
                 match tok.kind {

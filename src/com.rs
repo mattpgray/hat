@@ -9,10 +9,11 @@ pub struct Compiler {
 }
 
 impl Compiler {
-    pub fn compile(&mut self, out_file: String, ast: &ast::Ast) -> Result<(), CompileError> {
+    pub fn compile(&mut self, in_file: String, out_file: String) -> Result<(), CompileError> {
+        let ast = ast::Ast::from_file(in_file)?;
         {
             let mut out = File::create("out.asm")?;
-            self.compile_ast(ast, &mut out)?;
+            self.compile_ast(&ast, &mut out)?;
         }
         cmd("nasm", &["-felf64", "out.asm"])?;
         cmd("ld", &["out.o", "-o", out_file.as_str()])?;
@@ -416,7 +417,7 @@ format_char_hex_end:
                 writeln!(file, "        mov rcx, 2")?; // The base
                 writeln!(file, "        call print_uint64")?;
             }
-            // This willbe caught during type checking eventually. No need for a good error now.
+            // This will be caught during type checking eventually. No need for a good error now.
             _ => panic!("unknown intrinsic: {}", name),
         }
         Ok(())
@@ -433,6 +434,7 @@ format_char_hex_end:
 #[derive(Debug)]
 pub enum CompileError {
     CmdError(CmdError),
+    AstError(ast::ASTError),
     Io(std::io::Error),
 }
 
@@ -445,6 +447,12 @@ impl From<CmdError> for CompileError {
 impl From<std::io::Error> for CompileError {
     fn from(err: std::io::Error) -> Self {
         CompileError::Io(err)
+    }
+}
+
+impl From<ast::ASTError> for CompileError {
+    fn from(err: ast::ASTError) -> Self {
+        CompileError::AstError(err)
     }
 }
 
