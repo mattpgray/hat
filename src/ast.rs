@@ -57,9 +57,9 @@ pub enum Op {
 impl Op {
     fn precedence(&self) -> u8 {
         match self {
+            Op::Gt | Op::Lt => 0,
             Op::Sub | Op::Add => 1,
             Op::Mul | Op::Div => 2,
-            Op::Gt | Op::Lt => 3,
         }
     }
 }
