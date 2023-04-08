@@ -1,3 +1,4 @@
+use core::fmt;
 use std::path::{Path, PathBuf};
 
 use super::lexer::*;
@@ -19,6 +20,7 @@ impl From<SyntaxError> for ASTError {
 pub struct Var {
     pub name: String,
     pub value: Option<Expr>,
+    pub typ: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -26,6 +28,7 @@ pub struct Proc {
     pub name: String,
     // TODO: Args are not accepted.
     pub body: Block,
+    pub ret_types: Vec<String>
 }
 
 #[derive(Debug, Clone)]
@@ -64,6 +67,18 @@ impl Op {
     }
 }
 
+impl fmt::Display for Op {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Op::Sub => write!(f, "-"),
+            Op::Add => write!(f, "+"),
+            Op::Mul => write!(f, "*"),
+            Op::Div => write!(f, "/"),
+            Op::Gt => write!(f, ">"),
+            Op::Lt => write!(f, "<"),
+        }
+    }
+}
 #[derive(Debug, Clone)]
 pub struct Block {
     pub body: Vec<Stmt>,
@@ -485,6 +500,7 @@ impl Decl {
         Ok(Proc {
             name,
             body: Expr::parse_block(l)?,
+            ret_types: vec![],
         })
     }
 
@@ -501,9 +517,10 @@ impl Decl {
                 Ok(Var {
                     name,
                     value: Some(expr),
+                    typ: None, // TODO: Parsing variable types.
                 })
             }
-            TokenKind::SemiColon => Ok(Var { name, value: None }),
+            TokenKind::SemiColon => Ok(Var { name, value: None, typ: None }),
             _ => Err(SyntaxError::UnexpectedToken {
                 loc: tok.loc,
                 found: tok.kind,

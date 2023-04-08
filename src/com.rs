@@ -1,3 +1,5 @@
+use crate::types;
+
 use super::ast;
 use std::fs::File;
 use std::io::prelude::*;
@@ -11,6 +13,7 @@ pub struct Compiler {
 impl Compiler {
     pub fn compile(&mut self, in_file: String, out_file: String) -> Result<(), CompileError> {
         let ast = ast::Ast::from_file(in_file)?;
+        types::Context::from(&ast)?;
         {
             let mut out = File::create("out.asm")?;
             self.compile_ast(&ast, &mut out)?;
@@ -435,6 +438,7 @@ format_char_hex_end:
 pub enum CompileError {
     CmdError(CmdError),
     AstError(ast::ASTError),
+    TypeError(types::Errors),
     Io(std::io::Error),
 }
 
@@ -453,6 +457,12 @@ impl From<std::io::Error> for CompileError {
 impl From<ast::ASTError> for CompileError {
     fn from(err: ast::ASTError) -> Self {
         CompileError::AstError(err)
+    }
+}
+
+impl From<types::Error> for CompileError {
+    fn from(err: types::Error) -> Self {
+        CompileError::TypeError(err)
     }
 }
 

@@ -1,4 +1,4 @@
-// I do not like code golfmain
+// I do not like code golf
 #![allow(clippy::bool_to_int_with_if)]
 
 use std::env;
@@ -11,8 +11,7 @@ mod ast;
 mod com;
 mod lexer;
 mod sim;
-
-//------------------------------ parser end --------------------------------
+mod types;
 
 fn usage() {
     println!("The hat programming language");
@@ -65,6 +64,26 @@ fn handle_simulation_err(err: sim::SimulationError) -> ! {
     exit(1);
 }
 
+fn handle_type_err(err: types::Error) -> ! {
+    match err {
+        types::Error::InitializationCycle(word) => {
+            eprintln!("initialization cycle detected at {word}")
+        }
+        types::Error::UnresolvedReference(word) => eprintln!("unresolved reference {word}"),
+        types::Error::UnsupportedOp { typ, op } => {
+            eprintln!("operations {op} is not supported for typ {typ}")
+        }
+        types::Error::Mismatch { left, right } => {
+            eprintln!("type mismatch, left = {left}, right = {right}")
+        }
+        types::Error::UntypedVariable(var) => eprintln!("variable declared without a type {var}"),
+        types::Error::UnexpectedNumberOfTypes { want, got } => {
+            eprintln!("expected {want} types but found {got}")
+        }
+    }
+    exit(1);
+}
+
 fn handle_compile_err(err: com::CompileError) -> ! {
     match err {
         com::CompileError::CmdError(cmd_err) => eprintln!(
@@ -73,13 +92,14 @@ fn handle_compile_err(err: com::CompileError) -> ! {
         ),
         com::CompileError::Io(io_err) => eprintln!("io error: {}", io_err),
         com::CompileError::AstError(err) => handle_ast_err(err),
+        com::CompileError::TypeError(err) => handle_type_err(err),
     }
     exit(1);
 }
 
 fn handle_syntax_err(err: SyntaxError) -> ! {
-         eprintln!("{}: syntax error: {}", err.loc(), err);
-         exit(1);
+    eprintln!("{}: syntax error: {}", err.loc(), err);
+    exit(1);
 }
 
 fn handle_ast_err(err: ast::ASTError) -> ! {
@@ -132,7 +152,7 @@ fn main() {
                             println!("{}: {}, {}", tok.loc, tok.kind, tok.text);
                         }
                     },
-                    Err(err) => handle_syntax_err(err)
+                    Err(err) => handle_syntax_err(err),
                 }
             }
         }
