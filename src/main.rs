@@ -81,6 +81,8 @@ fn handle_type_err(err: types::Error) -> ! {
         types::Error::UnexpectedNumberOfTypes { want, got } => {
             format!("expected {want} types but found {got}")
         }
+        types::Error::NoMainFunction => "no main function".to_string(),
+
     };
     eprintln!("type error: {msg}");
     exit(1);

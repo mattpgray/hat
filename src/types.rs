@@ -34,6 +34,7 @@ pub enum Error {
     UntypedVariable(String),
     UnknownType(String),
     UnexpectedNumberOfTypes { want: usize, got: usize },
+    NoMainFunction,
 }
 
 enum Decl<'a> {
@@ -65,6 +66,8 @@ pub struct Context<'a> {
 }
 
 impl Context<'_> {
+    // If from does not return an error, the modes that use the type context can rely on the at
+    // being valid.
     pub fn from<'a>(ast: &'a ast::Ast) -> Result<Context<'a>, Error> {
         let mut context = Context {
             globals: HashMap::new(),
@@ -90,6 +93,20 @@ impl Context<'_> {
                 }
             }
         }
+        let valid_main = match context.globals.get("main") {
+            Some(decl) => {
+                if let Decl::Proc(_) = decl {
+                    true
+                } else {
+                    false
+                }
+            }
+            None => false,
+        };
+        if !valid_main {
+            return Err(Error::NoMainFunction);
+        }
+
         for decl in &ast.decls {
             if let ast::Decl::Var(var) = decl {
                 context.check_var(&var.name)?;
