@@ -101,6 +101,7 @@ pub enum TokenKind {
     OpenParen,
     CloseParen,
     SemiColon,
+    Colon,
     Hash,
     Comma,
 
@@ -138,6 +139,7 @@ impl fmt::Display for TokenKind {
             TokenKind::OpenParen => write!(f, "("),
             TokenKind::CloseParen => write!(f, ")"),
             TokenKind::SemiColon => write!(f, ";"),
+            TokenKind::Colon => write!(f, ":"),
             TokenKind::Comma => write!(f, ","),
             TokenKind::Hash => write!(f, "#"),
             TokenKind::Eq => write!(f, "="),
@@ -330,6 +332,11 @@ impl Lexer {
             }),
             ';' => Ok(Token {
                 kind: TokenKind::SemiColon,
+                loc,
+                text: c.to_string(),
+            }),
+            ':' => Ok(Token {
+                kind: TokenKind::Colon,
                 loc,
                 text: c.to_string(),
             }),

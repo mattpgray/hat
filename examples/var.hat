@@ -1,5 +1,5 @@
 var test = 1;
-var test2;
+var test2: u64;
 var test3 = 10-3;
 
 proc main() {

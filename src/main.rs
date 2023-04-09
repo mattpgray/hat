@@ -65,22 +65,24 @@ fn handle_simulation_err(err: sim::SimulationError) -> ! {
 }
 
 fn handle_type_err(err: types::Error) -> ! {
-    match err {
+    let msg = match err {
         types::Error::InitializationCycle(word) => {
-            eprintln!("initialization cycle detected at {word}")
+            format!("initialization cycle detected at {word}")
         }
-        types::Error::UnresolvedReference(word) => eprintln!("unresolved reference {word}"),
+        types::Error::UnresolvedReference(word) => format!("unresolved reference {word}"),
         types::Error::UnsupportedOp { typ, op } => {
-            eprintln!("operations {op} is not supported for typ {typ}")
+            format!("operations {op} is not supported for typ {typ}")
         }
         types::Error::Mismatch { left, right } => {
-            eprintln!("type mismatch, left = {left}, right = {right}")
+            format!("type mismatch, left = {left}, right = {right}")
         }
-        types::Error::UntypedVariable(var) => eprintln!("variable declared without a type {var}"),
+        types::Error::UntypedVariable(var) => format!("variable declared without a type {var}"),
+        types::Error::UnknownType(typ) => format!("unknown type {typ}"),
         types::Error::UnexpectedNumberOfTypes { want, got } => {
-            eprintln!("expected {want} types but found {got}")
+            format!("expected {want} types but found {got}")
         }
-    }
+    };
+    eprintln!("type error: {msg}");
     exit(1);
 }
 

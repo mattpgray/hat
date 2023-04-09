@@ -32,6 +32,7 @@ pub enum Error {
     UnsupportedOp { typ: String, op: ast::Op },
     Mismatch { left: String, right: String },
     UntypedVariable(String),
+    UnknownType(String),
     UnexpectedNumberOfTypes { want: usize, got: usize },
 }
 
@@ -149,6 +150,10 @@ impl Context<'_> {
         // depends on should already by type checked.
         let ret_typ = {
             let var = self.get_var(name);
+            // If the type is declared then it must be valid.
+            if let Some(typ) = &var.ast_var.typ {
+                self.check_type(typ)?;
+            }
             match &var.ast_var.value {
                 Some(expr) => {
                     let ret_types = self.check_expr(expr)?;
@@ -187,6 +192,15 @@ impl Context<'_> {
         })?;
 
         Ok(())
+    }
+
+    fn check_type(&self, typ: &String) -> Result<(), Error> {
+        // TODO: User defined types.
+        if Builtin::from_str(typ).is_none() {
+            Err(Error::UnknownType(typ.clone()))
+        } else {
+            Ok(())
+        }
     }
 
     fn check_expr(&self, expr: &ast::Expr) -> Result<Vec<String>, Error> {

@@ -28,7 +28,7 @@ pub struct Proc {
     pub name: String,
     // TODO: Args are not accepted.
     pub body: Block,
-    pub ret_types: Vec<String>
+    pub ret_types: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -166,6 +166,7 @@ impl Expr {
             | TokenKind::OpenParen
             | TokenKind::CloseParen
             | TokenKind::SemiColon
+            | TokenKind::Colon
             | TokenKind::Hash
             | TokenKind::Comma
             | TokenKind::Eq
@@ -253,6 +254,7 @@ impl Expr {
             | TokenKind::CloseCurly
             | TokenKind::CloseParen
             | TokenKind::SemiColon
+            | TokenKind::Colon
             | TokenKind::Proc
             | TokenKind::Else
             | TokenKind::Var
@@ -508,19 +510,41 @@ impl Decl {
         expect_token_kind(l, TokenKind::Var)?;
         let name = expect_token_kind(l, TokenKind::Word)?.text;
 
+        // Parse the variable type if we can.
+        let tok = l.peek()?;
+        let typ = match &tok.kind {
+            TokenKind::Colon => {
+                l.next()?;
+                let tok = expect_token_kind(l, TokenKind::Word)?;
+                Some(tok.text)
+            }
+            // Handled below
+            TokenKind::Eq | TokenKind::SemiColon => None,
+            _ => {
+                return Err(SyntaxError::UnexpectedToken {
+                    loc: tok.loc.clone(),
+                    found: tok.kind.clone(),
+                    want: vec![TokenKind::Eq, TokenKind::SemiColon, TokenKind::Colon],
+                })
+            }
+        };
+
         let tok = l.next()?;
         match tok.kind {
             TokenKind::Eq => {
-                // TODO: Allow arbitrary expressions.
                 let expr = Expr::parse(l)?;
                 expect_token_kind(l, TokenKind::SemiColon)?;
                 Ok(Var {
                     name,
                     value: Some(expr),
-                    typ: None, // TODO: Parsing variable types.
+                    typ,
                 })
             }
-            TokenKind::SemiColon => Ok(Var { name, value: None, typ: None }),
+            TokenKind::SemiColon => Ok(Var {
+                name,
+                value: None,
+                typ,
+            }),
             _ => Err(SyntaxError::UnexpectedToken {
                 loc: tok.loc,
                 found: tok.kind,
@@ -544,7 +568,11 @@ impl Ast {
         Ok(Ast { decls })
     }
 
-    fn append_decls(l: &mut Lexer, current_file: &String, decls: &mut Vec<Decl>) -> Result<(), SyntaxError> {
+    fn append_decls(
+        l: &mut Lexer,
+        current_file: &String,
+        decls: &mut Vec<Decl>,
+    ) -> Result<(), SyntaxError> {
         // First we parse the injections.
         loop {
             let tok = l.peek()?;
@@ -556,8 +584,9 @@ impl Ast {
             let injected_file = parse_string_literal(&tok)?;
 
             let injected_file = join_rel_paths(current_file, &injected_file);
-            let mut injected_lexer = Lexer::from_file(injected_file.clone())
-                .map_err(|err| SyntaxError::InvalidInjection(tok.loc, injected_file.clone(), err))?;
+            let mut injected_lexer = Lexer::from_file(injected_file.clone()).map_err(|err| {
+                SyntaxError::InvalidInjection(tok.loc, injected_file.clone(), err)
+            })?;
 
             Self::append_decls(&mut injected_lexer, &injected_file, decls)?;
             let _ = expect_token_kind(l, TokenKind::SemiColon)?;
@@ -624,21 +653,22 @@ fn join_rel_paths(a: &String, b: &String) -> String {
     a_path.pop(); // First pop off the file name
     let b_components = Path::new(b).components();
     for c in b_components {
-        match c{
+        match c {
             // "."
-            std::path::Component::CurDir => { } // nop
+            std::path::Component::CurDir => {} // nop
             // ".."
             std::path::Component::ParentDir => {
                 if !a_path.pop() {
                     todo!("Better error for invalid path")
                 }
-            },
+            }
             // "part"
             std::path::Component::Normal(p) => {
                 a_path = a_path.join(p);
             }
-            std::path::Component::Prefix(_) 
-            | std::path::Component::RootDir => todo!("Return better error for use of absolute paths")
+            std::path::Component::Prefix(_) | std::path::Component::RootDir => {
+                todo!("Return better error for use of absolute paths")
+            }
         }
     }
     // ew
