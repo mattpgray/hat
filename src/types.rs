@@ -102,7 +102,7 @@ impl Context<'_> {
         // First check for cycles and set the var as in progres. Then get the references to other
         // global declarations that are in the variable definition.
         let references = {
-            let var = self.mut_var(name, |var| {
+            self.mut_var(name, |var| {
                 if var.state == CheckState::InProgress {
                     return Err(Error::InitializationCycle(name.clone()));
                 } else if var.state == CheckState::Unchecked {
@@ -110,6 +110,7 @@ impl Context<'_> {
                 }
                 Ok(())
             })?;
+            let var = self.get_var(name);
             if var.state == CheckState::Checked {
                 return Ok(());
             }
@@ -136,12 +137,12 @@ impl Context<'_> {
         })?;
 
         // Now we type check the other variables and procs recursively.
-        for var in var_references {
-            self.check_var(name);
+        for name in &var_references {
+            self.check_var(name)?;
         }
-        for var in var_references {
+        for name in &proc_references {
             // We do not type check the proc here. We just check for variable cycles within it.
-            self.check_vars_in_proc(name);
+            self.check_vars_in_proc(name)?;
         }
 
         // And finally we can type check the variable we have. All other variables that this
@@ -152,7 +153,7 @@ impl Context<'_> {
                 Some(expr) => {
                     let ret_types = self.check_expr(expr)?;
                     expect_n(1, ret_types.len())?;
-                    Some(ret_types[0])
+                    Some(ret_types[0].clone())
                 }
                 None => None,
             }
@@ -160,8 +161,19 @@ impl Context<'_> {
 
         self.mut_var(name, |var| {
             match ret_typ {
-                Some(_) => todo!(),
-                None => match var.ast_var.typ {
+                Some(ret_typ) => {
+                    if let Some(ast_typ) = &var.ast_var.typ {
+                        // if explicitly specified then it must match.
+                        if ast_typ != &ret_typ {
+                            return Err(Error::Mismatch {
+                                left: ast_typ.clone(),
+                                right: ret_typ,
+                            });
+                        }
+                    }
+                    var.typ = ret_typ;
+                }
+                None => match &var.ast_var.typ {
                     Some(typ) => {
                         var.typ = typ.clone();
                     }
@@ -189,7 +201,7 @@ impl Context<'_> {
                     Some(decl) => match decl {
                         Decl::Var(var) => {
                             assert!(var.state == CheckState::Checked);
-                            Ok(vec![var.typ])
+                            Ok(vec![var.typ.clone()])
                         }
                         Decl::Proc(proc) => Ok(proc.ast_proc.ret_types.clone()),
                     },
@@ -268,17 +280,16 @@ impl Context<'_> {
     }
 
     // mut_var looks weird and that is because of rust being a pain in the ass. We cannot get
-    // another reference to any member of the hashset if we have a mutable reference to one of the
-    // them. This function allows for the most common use case, mutating the hashset some and then
-    // reading it afterwards.
-    fn mut_var<F>(&self, name: &String, f: F) -> Result<&Var, Error>
+    // another reference to any member of the hashset if we have a mutable reference to one of
+    // them. This function allows for the most common use case, mutating the hashset when we know
+    // that the key contains a variable declaration.
+    fn mut_var<F>(&mut self, name: &String, f: F) -> Result<(), Error>
     where
         F: FnOnce(&mut Var) -> Result<(), Error>,
     {
         let decl = self.globals.get_mut(name).expect("variable should exist");
         if let Decl::Var(var) = decl {
-            f(var)?;
-            Ok(var)
+            f(var)
         } else {
             panic!("Should not have got a decl that was not a var");
         }

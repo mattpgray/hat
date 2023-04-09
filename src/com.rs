@@ -438,7 +438,7 @@ format_char_hex_end:
 pub enum CompileError {
     CmdError(CmdError),
     AstError(ast::ASTError),
-    TypeError(types::Errors),
+    TypeError(types::Error),
     Io(std::io::Error),
 }
 
