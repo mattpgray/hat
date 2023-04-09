@@ -1,0 +1,4 @@
+var a = b;
+var b = a;
+
+proc main() {}

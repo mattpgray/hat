@@ -1,0 +1,5 @@
+{
+    "return_code": 1,
+    "stderr": "Error running command nasm: exit code 1, output: \nout.asm:115: error: symbol `main' undefined\n\n",
+    "stdout": "[cmd] nasm -felf64 out.asm\n"
+}

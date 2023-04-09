@@ -35,7 +35,9 @@ def dict_compare(d1, d2):
     return added, removed, modified, same
 
 def run_com(file):
-    subprocess.run(["./target/release/hat", "com", file], check=True)
+    com_result = subprocess.run(["./target/release/hat", "com", file], capture_output=True)
+    if com_result.returncode != 0:
+        return com_result
     return subprocess.run(["./out"], capture_output=True)
 
 def run_sim(file):
