@@ -84,7 +84,7 @@ def main() :
     )
 
     parser.add_argument('-u', '--update', action="store_true", help="Update the test outputs instead of testing")
-    parser.add_argument('-m', '--mode', default="sim", help="The mode of hat to test.", choices=("sim", "com"))
+    parser.add_argument('-m', '--mode', default="com", help="The mode of hat to test.", choices=("sim", "com"))
     args = parser.parse_args()
 
     print("Compling hat...")
