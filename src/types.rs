@@ -35,6 +35,7 @@ pub enum Error {
     UnknownType(String),
     UnexpectedNumberOfTypes { want: usize, got: usize },
     NoMainFunction,
+    DuplicateReference(String),
 }
 
 enum Decl<'a> {
@@ -73,26 +74,24 @@ impl Context<'_> {
             globals: HashMap::new(),
         };
         for decl in &ast.decls {
-            match decl {
-                ast::Decl::Var(var) => {
-                    context.globals.insert(
-                        var.name.clone(),
-                        Decl::Var(Var {
-                            ast_var: var,
-                            state: CheckState::Unchecked,
-                            typ: "".to_string(),
-                            global_proc_references: vec![],
-                            global_var_references: vec![],
-                        }),
-                    );
-                }
-                ast::Decl::Proc(proc) => {
-                    context
-                        .globals
-                        .insert(proc.name.clone(), Decl::Proc(Proc { ast_proc: proc }));
-                }
+            let (name, decl) = match decl {
+                ast::Decl::Var(var) => (
+                    &var.name,
+                    Decl::Var(Var {
+                        ast_var: var,
+                        state: CheckState::Unchecked,
+                        typ: "".to_string(),
+                        global_proc_references: vec![],
+                        global_var_references: vec![],
+                    }),
+                ),
+                ast::Decl::Proc(proc) => (&proc.name, Decl::Proc(Proc { ast_proc: proc })),
+            };
+            if context.globals.insert(name.clone(), decl).is_some() {
+                return Err(Error::DuplicateReference(name.clone()));
             }
         }
+
         let valid_main = match context.globals.get("main") {
             Some(decl) => {
                 if let Decl::Proc(_) = decl {

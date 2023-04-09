@@ -88,7 +88,7 @@ def main() :
     args = parser.parse_args()
 
     print("Compling hat...")
-    subprocess.run(["cargo", "build", "--release"])
+    subprocess.run(["cargo", "build", "--release"], check=True)
 
     if args.mode == "sim":
         result = run_tests(args, run_sim)

@@ -1,0 +1,5 @@
+{
+    "return_code": 1,
+    "stderr": "type error: duplicate reference a\n",
+    "stdout": ""
+}

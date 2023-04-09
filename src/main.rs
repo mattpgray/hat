@@ -82,7 +82,7 @@ fn handle_type_err(err: types::Error) -> ! {
             format!("expected {want} types but found {got}")
         }
         types::Error::NoMainFunction => "no main function".to_string(),
-
+        types::Error::DuplicateReference(word) => format!("duplicate reference {word}"),
     };
     eprintln!("type error: {msg}");
     exit(1);
