@@ -3,6 +3,7 @@ use crate::types;
 use super::ast;
 use std::fs::File;
 use std::io::prelude::*;
+use std::path::PathBuf;
 use std::process::Command;
 
 #[derive(Default)]
@@ -12,14 +13,25 @@ pub struct Compiler {
 
 impl Compiler {
     pub fn compile(&mut self, in_file: String, out_file: String) -> Result<(), CompileError> {
+        let asm_out_file = {
+            let mut path = PathBuf::from(&out_file);
+            path.set_extension("asm");
+            path.to_str().expect("setting extension to work").to_owned()
+        };
+        let o_out_file = {
+            let mut path = PathBuf::from(&out_file);
+            path.set_extension("o");
+            path.to_str().expect("setting extension to work").to_owned()
+        };
+
         let ast = ast::Ast::from_file(in_file)?;
         types::Context::from(&ast)?;
         {
-            let mut out = File::create("out.asm")?;
+            let mut out = File::create(&asm_out_file)?;
             self.compile_ast(&ast, &mut out)?;
         }
-        cmd("nasm", &["-felf64", "out.asm"])?;
-        cmd("ld", &["out.o", "-o", out_file.as_str()])?;
+        cmd("nasm", &["-felf64", &asm_out_file])?;
+        cmd("ld", &[&o_out_file, "-o", out_file.as_str()])?;
         Ok(())
     }
 

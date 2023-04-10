@@ -36,10 +36,15 @@ def dict_compare(d1, d2):
     return added, removed, modified, same
 
 def run_com(file):
-    com_result = run_cmd(["./target/release/hat", "com", file], capture_output=True)
+    output_file = "./testbin"
+    com_result = run_cmd(["./target/release/hat", "com", file, "-o", output_file], capture_output=True)
     if com_result.returncode != 0:
         return com_result
-    return run_cmd(["./out"], capture_output=True)
+    res = run_cmd([output_file], capture_output=True)
+    os.remove(output_file)
+    os.remove(f"{output_file}.o")
+    os.remove(f"{output_file}.asm")
+    return res
 
 def run_cmd(cmd_args, *args, **kwargs):
     print("[cmd]", " ".join(shlex.quote(arg) for arg in cmd_args))

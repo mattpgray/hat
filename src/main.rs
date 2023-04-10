@@ -16,9 +16,10 @@ fn usage() {
     println!("The hat programming language");
     println!("Usage: hat SUBCOMMAND");
     println!("SUMCOMMANDS");
-    println!("    help           print this usage information");
-    println!("    lex   <file>   print the lexing information for the provided file");
-    println!("    ast   <file>   print the ast for the provided file");
+    println!("    help                   print this usage information");
+    println!("    lex   <file>           print the lexing information for the provided file");
+    println!("    ast   <file>           print the ast for the provided file");
+    println!("    com   <file> [-o file] compile the provided file");
 }
 fn get_file_path(args: &mut Vec<String>) -> String {
     if args.is_empty() {
@@ -45,6 +46,10 @@ fn parse_compile_args(args: Vec<String>) -> CompileArgs {
                 out_file = args.get(i).unwrap().to_owned();
             }
             _ => {
+                if in_file.is_some() {
+                    eprintln!("compilation mode only supports one input file");
+                    exit(1);
+                }
                 in_file = Some(args[i].to_string());
             }
         }
