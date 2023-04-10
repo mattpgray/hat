@@ -10,7 +10,6 @@ use lexer::SyntaxError;
 mod ast;
 mod com;
 mod lexer;
-mod sim;
 mod types;
 
 fn usage() {
@@ -20,7 +19,6 @@ fn usage() {
     println!("    help           print this usage information");
     println!("    lex   <file>   print the lexing information for the provided file");
     println!("    ast   <file>   print the ast for the provided file");
-    println!("    sim   <file>   run the provided file interactively");
 }
 fn get_file_path(args: &mut Vec<String>) -> String {
     if args.is_empty() {
@@ -54,14 +52,6 @@ fn parse_compile_args(args: Vec<String>) -> CompileArgs {
     }
     let in_file = in_file.unwrap();
     CompileArgs { out_file, in_file }
-}
-
-fn handle_simulation_err(err: sim::SimulationError) -> ! {
-    match err {
-        sim::SimulationError::ExecutionError(err) => eprintln!("execution error: {}", err),
-        sim::SimulationError::AstError(err) => handle_ast_err(err),
-    }
-    exit(1);
 }
 
 fn handle_type_err(err: types::Error) -> ! {
@@ -149,11 +139,6 @@ fn main() {
             let ast = ast::Ast::from_file(get_file_path(&mut args))
                 .unwrap_or_else(|err| handle_ast_err(err));
             println!("{ast:#?}");
-        }
-        "sim" => {
-            let mut ctx = sim::Context::default();
-            ctx.run(get_file_path(&mut args))
-                .unwrap_or_else(|err| handle_simulation_err(err));
         }
         "lex" => {
             let file_path = get_file_path(&mut args);

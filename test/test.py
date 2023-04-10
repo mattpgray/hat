@@ -41,21 +41,18 @@ def run_com(file):
         return com_result
     return run_cmd(["./out"], capture_output=True)
 
-def run_sim(file):
-    return run_cmd(["./target/release/hat", "sim", file], capture_output=True)
-
 def run_cmd(cmd_args, *args, **kwargs):
     print("[cmd]", " ".join(shlex.quote(arg) for arg in cmd_args))
     return subprocess.run(cmd_args, *args, **kwargs)
 
-def run_tests(args, runner):
+def run_tests(args):
     result = 0
     for file in test_files():
         if args.update:
             print(f"Updating test for {file}")
         else:
             print(f"Running test for {file}")
-        proc_result = runner(file)
+        proc_result = run_com(file)
         result_dict = {
                 "stdout": proc_result.stdout.decode("utf-8"),
                 "stderr": proc_result.stderr.decode("utf-8"),
@@ -89,18 +86,10 @@ def main() :
     )
 
     parser.add_argument('-u', '--update', action="store_true", help="Update the test outputs instead of testing")
-    parser.add_argument('-m', '--mode', default="com", help="The mode of hat to test.", choices=("sim", "com"))
     args = parser.parse_args()
 
     run_cmd(["cargo", "build", "--release"], check=True)
-
-    if args.mode == "sim":
-        result = run_tests(args, run_sim)
-    elif args.mode == "com":
-        result = run_tests(args, run_com)
-    else:
-        print(f"Invalid mode {args.mode}")
-        result = 1
+    result = run_tests(args)
 
     exit(result)
 
