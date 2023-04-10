@@ -8,13 +8,8 @@ import sys
 import shlex
 
 
-script_dir = os.path.dirname(os.path.abspath(__file__))
-def local_path(*args):
-    return os.path.abspath(os.path.join(script_dir, "..", *args))
-
-
 def test_files():
-    example_dir = local_path("examples")
+    example_dir = "./examples"
     for f in os.listdir(example_dir):
         path = os.path.join(example_dir, f)
         if not os.path.isfile(path):
@@ -84,6 +79,12 @@ def main() :
     It runs the program files in the examples directory and checks that
     the output has not changed.
     """
+
+    # Nicer error message by changing directory. It means we do not get absolute paths in the error 
+    # messages.
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(os.path.join(script_dir, ".."))
+
 
     parser = argparse.ArgumentParser(
         prog = 'hat tester', 
