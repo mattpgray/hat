@@ -68,9 +68,9 @@ impl fmt::Display for SyntaxError {
 }
 #[derive(Debug, Clone)]
 pub struct Loc {
-    file_path: String,
-    row: usize,
-    col: usize,
+    pub file_path: String,
+    pub row: usize,
+    pub col: usize,
 }
 
 impl fmt::Display for Loc {

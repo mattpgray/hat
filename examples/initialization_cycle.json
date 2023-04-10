@@ -1,5 +1,5 @@
 {
     "return_code": 1,
-    "stderr": "type error: initialization cycle detected at a\n",
+    "stderr": "/home/mgray/code/hat/examples/initialization_cycle.hat:1:5: type error: initialization cycle detected at a\n",
     "stdout": ""
 }

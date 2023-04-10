@@ -3,6 +3,48 @@ use std::path::{Path, PathBuf};
 
 use super::lexer::*;
 
+#[derive(Debug, Clone)]
+pub struct Word {
+    pub text: String,
+    pub start: Loc,
+}
+
+impl Word {
+    fn from(tok: Token) -> Self {
+        //  assert!(
+        //      tok.kind != TokenKind::Word,
+        //      "Word should only be created for word tokens {tok:?}"
+        //  );
+        Word {
+            text: tok.text,
+            start: tok.loc,
+        }
+    }
+}
+
+// TODO: Refactor intrinsics to require the hash to be part of the word and then remove this
+// struct and only use Word.
+
+#[derive(Debug, Clone)]
+pub struct IntrinsicName {
+    pub hash_loc: Loc,
+    pub name: Word,
+}
+
+impl IntrinsicName {
+    fn from(hash_loc: Loc, tok: Token) -> Self {
+        IntrinsicName {
+            hash_loc,
+            name: Word::from(tok),
+        }
+    }
+}
+
+// Node is a set of common methods for each node of the ast.
+pub trait Node {
+    fn start(&self) -> &Loc;
+}
+
 #[derive(Debug)]
 pub enum ASTError {
     SyntaxError(SyntaxError),
@@ -18,14 +60,16 @@ impl From<SyntaxError> for ASTError {
 
 #[derive(Debug)]
 pub struct Var {
-    pub name: String,
+    pub start: Loc,
+    pub name: Word,
     pub value: Option<Expr>,
-    pub typ: Option<String>,
+    pub typ: Option<Word>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Proc {
-    pub name: String,
+    pub start: Loc,
+    pub name: Word,
     // TODO: Args are not accepted.
     pub body: Block,
     pub ret_types: Vec<String>,
@@ -34,16 +78,34 @@ pub struct Proc {
 #[derive(Debug, Clone)]
 pub enum Stmt {
     Expr(Expr),
-    While { cond: Expr, body: Block },
-    Assign(String, Expr),
+    While { start: Loc, cond: Expr, body: Block },
+    Assign(Word, Expr),
+}
+
+impl Node for Stmt {
+    fn start(&self) -> &Loc {
+        match self {
+            Stmt::While {
+                start,
+                cond: _,
+                body: _,
+            }
+            | Stmt::Assign(Word { start, .. }, _) => start,
+            Stmt::Expr(expr) => expr.start(),
+        }
+    }
 }
 
 impl Stmt {
     fn parse_while(l: &mut Lexer) -> Result<Stmt, SyntaxError> {
-        expect_token_kind(l, TokenKind::While)?;
+        let while_tok = expect_token_kind(l, TokenKind::While)?;
         let cond = Expr::parse(l)?;
         let body = Expr::parse_block(l)?;
-        Ok(Stmt::While { cond, body })
+        Ok(Stmt::While {
+            start: while_tok.loc.clone(),
+            cond,
+            body,
+        })
     }
 }
 
@@ -81,23 +143,25 @@ impl fmt::Display for Op {
 }
 #[derive(Debug, Clone)]
 pub struct Block {
+    pub start: Loc,
     pub body: Vec<Stmt>,
     pub ret_expr: Option<Expr>,
 }
 
 #[derive(Debug, Clone)]
 pub enum Expr {
-    IntLiteral(u64),
-    IntrinsicCall(String, Vec<Expr>),
-    Word(String),
+    IntLiteral(Loc, u64),
+    IntrinsicCall(IntrinsicName, Vec<Expr>),
+    Word(Word),
     Op {
         left: Box<Expr>,
         right: Box<Expr>,
         op: Op,
     },
     // Need an explicit bracket expr to be able to differentiate (1+2) * 3 from 1 + 2 * 3.
-    BracketExpr(Box<Expr>),
+    BracketExpr(Loc, Box<Expr>),
     If {
+        start: Loc,
         cond: Box<Expr>,
         then: Box<Block>,
         else_: Option<Box<Expr>>,
@@ -113,6 +177,34 @@ pub enum Expr {
     Block(Box<Block>),
 }
 
+impl Node for Expr {
+    fn start(&self) -> &Loc {
+        match self {
+            Expr::IntLiteral(start, _)
+            | Expr::IntrinsicCall(
+                IntrinsicName {
+                    hash_loc: start, ..
+                },
+                _,
+            )
+            | Expr::Word(Word { start, .. })
+            | Expr::BracketExpr(start, _)
+            | Expr::If {
+                start,
+                cond: _,
+                then: _,
+                else_: _,
+            } => start,
+            Expr::Op {
+                left,
+                right: _,
+                op: _,
+            } => left.start(),
+            Expr::Block(block) => &block.start,
+        }
+    }
+}
+
 impl Expr {
     // n_returns performs a quick search to determine how many values an expression returns. It
     // does not perform a strict lookup of all branches or return types of functions.
@@ -125,6 +217,7 @@ impl Expr {
             | Expr::Op { .. }
             | Expr::BracketExpr(..) => true,
             Expr::If {
+                start: _,
                 cond: _,
                 then,
                 else_: _,
@@ -191,8 +284,8 @@ impl Expr {
                 Self::parse_word_expr(l, &tok)
             }
             TokenKind::Hash => {
-                l.next()?;
-                let name = expect_token_kind(l, TokenKind::Word)?.text;
+                let hash_loc = l.next()?.loc;
+                let name_tok = expect_token_kind(l, TokenKind::Word)?;
                 expect_token_kind(l, TokenKind::OpenParen)?;
                 let mut args = Vec::new();
                 loop {
@@ -224,29 +317,41 @@ impl Expr {
                         }
                     }
                 }
-                Ok(Expr::IntrinsicCall(name, args))
+                Ok(Expr::IntrinsicCall(
+                    IntrinsicName::from(hash_loc, name_tok),
+                    args,
+                ))
             }
             TokenKind::Minus => {
                 l.next()?;
                 let expr = Expr::parse(l)?;
                 Ok(Expr::Op {
-                    left: Box::new(Expr::IntLiteral(0)),
+                    // TODO: This should be an int literal with some kind of minus flag. We are
+                    // having to use an invalid location as a hack.
+                    left: Box::new(Expr::IntLiteral(
+                        Loc {
+                            row: 1,
+                            col: 1,
+                            file_path: "".to_string(),
+                        },
+                        0,
+                    )),
                     right: Box::new(expr),
                     op: Op::Sub,
                 })
             }
             TokenKind::IntLiteral => {
                 let tok = l.next()?;
-                Ok(Expr::IntLiteral(Self::parse_int_literal(tok.text)))
+                Ok(Expr::IntLiteral(tok.loc, Self::parse_int_literal(tok.text)))
             }
             TokenKind::StringLiteral => {
-                todo!("string literals in expressions is not supported yet")
+                todo!("string literals in expressions are not supported yet")
             }
             TokenKind::OpenParen => {
-                l.next()?;
+                let tok = l.next()?;
                 let expr = Expr::parse(l)?;
                 expect_token_kind(l, TokenKind::CloseParen)?;
-                Ok(Expr::BracketExpr(Box::new(expr)))
+                Ok(Expr::BracketExpr(tok.loc, Box::new(expr)))
             }
             TokenKind::OpenCurly => Ok(Expr::Block(Box::new(Self::parse_block(l)?))),
             TokenKind::If => Self::parse_if(l),
@@ -316,6 +421,8 @@ impl Expr {
         }
     }
 
+    // TODO: Refactor me to take an owned token so that we do not need to clone the text and
+    // location.
     fn parse_word_expr(_l: &mut Lexer, word_tok: &Token) -> Result<Self, SyntaxError> {
         assert!(word_tok.kind == TokenKind::Word, "Expected word token");
         let tok = _l.peek()?;
@@ -326,7 +433,7 @@ impl Expr {
                     word_tok.loc
                 )
             }
-            _ => Ok(Expr::Word(word_tok.text.clone())),
+            _ => Ok(Expr::Word(Word::from(word_tok.clone()))),
         }
     }
 
@@ -340,7 +447,7 @@ impl Expr {
     }
 
     fn parse_if(l: &mut Lexer) -> Result<Expr, SyntaxError> {
-        expect_token_kind(l, TokenKind::If)?;
+        let if_tok = expect_token_kind(l, TokenKind::If)?;
         let cond = Box::new(Expr::parse(l)?);
         let then = Box::new(Self::parse_block(l)?);
 
@@ -352,18 +459,29 @@ impl Expr {
                 match tok.kind {
                     TokenKind::If => {
                         let else_ = Some(Box::new(Self::parse_if(l)?));
-                        Ok(Self::If { cond, then, else_ })
+                        Ok(Self::If {
+                            start: if_tok.loc,
+                            cond,
+                            then,
+                            else_,
+                        })
                     }
                     _ => {
                         // TODO: Maybe refactor to remove this double box.
                         let block = Self::parse_block(l)?;
                         let expr = Self::Block(Box::new(block));
                         let else_ = Some(Box::new(expr));
-                        Ok(Self::If { cond, then, else_ })
+                        Ok(Self::If {
+                            start: if_tok.loc,
+                            cond,
+                            then,
+                            else_,
+                        })
                     }
                 }
             }
             _ => Ok(Self::If {
+                start: if_tok.loc,
                 cond,
                 then,
                 else_: None,
@@ -372,7 +490,7 @@ impl Expr {
     }
 
     fn parse_block(l: &mut Lexer) -> Result<Block, SyntaxError> {
-        expect_token_kind(l, TokenKind::OpenCurly)?;
+        let start = expect_token_kind(l, TokenKind::OpenCurly)?.loc;
         let mut stmts = Vec::new();
         loop {
             let tok = l.peek()?;
@@ -412,12 +530,14 @@ impl Expr {
                                         // If the internal has a return expression, so do we.
                                         if expr.has_return() {
                                             return Ok(Block {
+                                                start,
                                                 body: stmts,
                                                 ret_expr: Some(expr),
                                             });
                                         } else {
                                             stmts.push(Stmt::Expr(expr));
                                             return Ok(Block {
+                                                start,
                                                 body: stmts,
                                                 ret_expr: None,
                                             });
@@ -434,6 +554,7 @@ impl Expr {
                                         }
                                         TokenKind::CloseCurly => {
                                             return Ok(Block {
+                                                start,
                                                 body: stmts,
                                                 ret_expr: Some(expr),
                                             });
@@ -453,6 +574,7 @@ impl Expr {
             }
         }
         Ok(Block {
+            start,
             body: stmts,
             ret_expr: None,
         })
@@ -460,16 +582,16 @@ impl Expr {
 
     // Callers of this function will need to validate the semicolons.
     fn parse_stmt_unsafe(l: &mut Lexer) -> Result<Stmt, SyntaxError> {
-        let tok = l.peek()?.clone();
+        let tok = l.peek()?;
 
-        match tok.kind {
+        match &tok.kind {
             TokenKind::While => Ok(Stmt::parse_while(l)?),
             TokenKind::Word => {
-                l.next()?;
+                let tok = l.next()?;
                 let p_tok = l.peek()?;
                 if p_tok.kind == TokenKind::Eq {
                     l.next()?;
-                    let assign = Stmt::Assign(tok.text, Expr::parse(l)?);
+                    let assign = Stmt::Assign(Word::from(tok), Expr::parse(l)?);
                     Ok(assign)
                 } else {
                     let expr = Expr::parse_word_expr(l, &tok)?;
@@ -487,10 +609,28 @@ pub enum Decl {
     Proc(Proc),
 }
 
+impl Node for Decl {
+    fn start(&self) -> &Loc {
+        match self {
+            Decl::Var(Var { start, .. }) | Decl::Proc(Proc { start, .. }) => start,
+        }
+    }
+}
+
+// Public methods
+impl Decl {
+    pub fn reference_loc(&self) -> &Loc {
+        match self {
+            Decl::Var(Var { name, .. }) | Decl::Proc(Proc { name, .. }) => &name.start,
+        }
+    }
+}
+
+// Internal methods.
 impl Decl {
     fn parse_proc(l: &mut Lexer) -> Result<Proc, SyntaxError> {
-        expect_token_kind(l, TokenKind::Proc)?;
-        let name = expect_token_kind(l, TokenKind::Word)?.text;
+        let start = expect_token_kind(l, TokenKind::Proc)?.loc;
+        let name_tok = expect_token_kind(l, TokenKind::Word)?;
         expect_token_kind(l, TokenKind::OpenParen)?;
         // TODO: Parse args.
         expect_token_kind(l, TokenKind::CloseParen)?;
@@ -500,15 +640,16 @@ impl Decl {
         peek_expect_token_kind(l, TokenKind::OpenCurly)?;
 
         Ok(Proc {
-            name,
+            start,
+            name: Word::from(name_tok),
             body: Expr::parse_block(l)?,
             ret_types: vec![],
         })
     }
 
     fn parse_var(l: &mut Lexer) -> Result<Var, SyntaxError> {
-        expect_token_kind(l, TokenKind::Var)?;
-        let name = expect_token_kind(l, TokenKind::Word)?.text;
+        let start = expect_token_kind(l, TokenKind::Var)?.loc;
+        let name_tok = expect_token_kind(l, TokenKind::Word)?;
 
         // Parse the variable type if we can.
         let tok = l.peek()?;
@@ -516,7 +657,7 @@ impl Decl {
             TokenKind::Colon => {
                 l.next()?;
                 let tok = expect_token_kind(l, TokenKind::Word)?;
-                Some(tok.text)
+                Some(Word::from(tok))
             }
             // Handled below
             TokenKind::Eq | TokenKind::SemiColon => None,
@@ -530,18 +671,20 @@ impl Decl {
         };
 
         let tok = l.next()?;
-        match tok.kind {
+        match &tok.kind {
             TokenKind::Eq => {
                 let expr = Expr::parse(l)?;
                 expect_token_kind(l, TokenKind::SemiColon)?;
                 Ok(Var {
-                    name,
+                    start,
+                    name: Word::from(name_tok),
                     value: Some(expr),
                     typ,
                 })
             }
             TokenKind::SemiColon => Ok(Var {
-                name,
+                start,
+                name: Word::from(name_tok),
                 value: None,
                 typ,
             }),

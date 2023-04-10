@@ -83,7 +83,7 @@ impl Context {
         for decl in ast.decls.iter() {
             match decl {
                 Decl::Proc(proc) => {
-                    self.global_procs.insert(proc.name.clone(), proc.clone());
+                    self.global_procs.insert(proc.name.text.clone(), proc.clone());
                 }
                 Decl::Var(var) => {
                     let res = match var.value.as_ref() {
@@ -94,7 +94,7 @@ impl Context {
                         }
                         None => 0,
                     };
-                    self.global_vars.insert(var.name.clone(), res);
+                    self.global_vars.insert(var.name.text.clone(), res);
                 }
             }
         }
@@ -132,8 +132,8 @@ impl Context {
                 self.run_expr(expr)?;
                 Ok(())
             }
-            Stmt::Assign(name, expr) => self.run_assign(name, expr),
-            Stmt::While { cond, body } => self.run_while(cond, body),
+            Stmt::Assign(name, expr) => self.run_assign(&name.text, expr),
+            Stmt::While { start: _, cond, body } => self.run_while(cond, body),
         }
     }
 
@@ -188,18 +188,18 @@ impl Context {
 
     fn run_expr(&mut self, expr: &Expr) -> Result<ExprResult, ExecutionError> {
         match expr {
-            Expr::IntLiteral(u) => Ok(ExprResult { results: vec![*u] }),
-            Expr::IntrinsicCall(name, args) => self.run_intrinsic(name, args),
+            Expr::IntLiteral(_, u) => Ok(ExprResult { results: vec![*u] }),
+            Expr::IntrinsicCall(name, args) => self.run_intrinsic(&name.name.text, args),
             Expr::Word(word) => {
                 let v = self
                     .global_vars
-                    .get(word)
-                    .ok_or_else(|| ExecutionError::UknownValue(word.clone()))?;
+                    .get(&word.text)
+                    .ok_or_else(|| ExecutionError::UknownValue(word.text.clone()))?;
                 Ok(ExprResult { results: vec![*v] })
             }
             Expr::Op { left, right, op } => self.run_op(left, right, op),
-            Expr::BracketExpr(expr) => self.run_expr(expr),
-            Expr::If { cond, then, else_ } => self.run_if(cond, then, else_),
+            Expr::BracketExpr(_, expr) => self.run_expr(expr),
+            Expr::If { start: _, cond, then, else_ } => self.run_if(cond, then, else_),
             Expr::Block(block) => self.run_block(block),
         }
     }

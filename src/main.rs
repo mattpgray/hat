@@ -65,26 +65,39 @@ fn handle_simulation_err(err: sim::SimulationError) -> ! {
 }
 
 fn handle_type_err(err: types::Error) -> ! {
-    let msg = match err {
-        types::Error::InitializationCycle(word) => {
-            format!("initialization cycle detected at {word}")
+    let (loc, msg) = match err {
+        types::Error::InitializationCycle(loc, word) => (
+            Some(loc),
+            format!("initialization cycle detected at {word}"),
+        ),
+        types::Error::UnresolvedReference(loc, word) => {
+            (Some(loc), format!("unresolved reference {word}"))
         }
-        types::Error::UnresolvedReference(word) => format!("unresolved reference {word}"),
-        types::Error::UnsupportedOp { typ, op } => {
-            format!("operations {op} is not supported for typ {typ}")
+        types::Error::UnsupportedOp { loc, typ, op } => (
+            Some(loc),
+            format!("operations {op} is not supported for typ {typ}"),
+        ),
+        types::Error::Mismatch { loc, left, right } => (
+            Some(loc),
+            format!("type mismatch, left = {left}, right = {right}"),
+        ),
+        types::Error::UntypedVariable(loc, var) => {
+            (Some(loc), format!("variable declared without a type {var}"))
         }
-        types::Error::Mismatch { left, right } => {
-            format!("type mismatch, left = {left}, right = {right}")
+        types::Error::UnknownType(loc, typ) => (Some(loc), format!("unknown type {typ}")),
+        types::Error::UnexpectedNumberOfTypes { loc, want, got } => {
+            (Some(loc), format!("expected {want} types but found {got}"))
         }
-        types::Error::UntypedVariable(var) => format!("variable declared without a type {var}"),
-        types::Error::UnknownType(typ) => format!("unknown type {typ}"),
-        types::Error::UnexpectedNumberOfTypes { want, got } => {
-            format!("expected {want} types but found {got}")
+        types::Error::DuplicateReference{curr, prev, word} => {
+            (Some(curr), format!("duplicate reference {word}. Previously defined at {prev}"))
         }
-        types::Error::NoMainFunction => "no main function".to_string(),
-        types::Error::DuplicateReference(word) => format!("duplicate reference {word}"),
+        types::Error::NoMainFunction => (None, "no main function".to_string()),
     };
-    eprintln!("type error: {msg}");
+    if let Some(loc) = loc {
+        eprintln!("{loc}: type error: {msg}");
+    } else {
+        eprintln!("type error: {msg}");
+    }
     exit(1);
 }
 

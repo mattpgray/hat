@@ -193,7 +193,7 @@ format_char_hex_end:
         writeln!(file, "section .data")?;
         for decl in &ast.decls {
             match decl {
-                ast::Decl::Var(var) => writeln!(file, "        {}: dq 0", var.name,)?,
+                ast::Decl::Var(var) => writeln!(file, "        {}: dq 0", var.name.text)?,
                 ast::Decl::Proc(_) => continue,
             }
         }
@@ -215,13 +215,13 @@ format_char_hex_end:
         file: &mut File,
     ) -> Result<(), CompileError> {
         if let Some(expr) = &var.value {
-            self.compile_assign(&var.name, expr, file)?;
+            self.compile_assign(&var.name.text, expr, file)?;
         }
         Ok(())
     }
 
     fn compile_proc(&mut self, proc: &ast::Proc, file: &mut File) -> Result<(), CompileError> {
-        writeln!(file, "{}:", proc.name)?;
+        writeln!(file, "{}:", proc.name.text)?;
         self.compile_block(&proc.body, file)?;
         writeln!(file, "        ret")?;
         Ok(())
@@ -239,15 +239,15 @@ format_char_hex_end:
 
     fn compile_expr(&mut self, expr: &ast::Expr, file: &mut File) -> Result<(), CompileError> {
         match expr {
-            ast::Expr::IntLiteral(num) => {
+            ast::Expr::IntLiteral(_, num) => {
                 writeln!(file, "        mov rax, {}", num)?;
                 Ok(())
             }
             ast::Expr::IntrinsicCall(name, exprs) => {
-                self.compile_interinsic_call(name, exprs, file)
+                self.compile_interinsic_call(&name.name.text, exprs, file)
             }
             ast::Expr::Word(word) => {
-                writeln!(file, "        mov rax, [{}]", word)?;
+                writeln!(file, "        mov rax, [{}]", word.text)?;
                 Ok(())
             }
             ast::Expr::Op { left, right, op } => {
@@ -300,8 +300,8 @@ format_char_hex_end:
                 }
                 Ok(())
             }
-            ast::Expr::BracketExpr(expr) => self.compile_expr(expr, file),
-            ast::Expr::If { cond, then, else_ } => self.compile_if(file, cond, then, else_),
+            ast::Expr::BracketExpr(_, expr) => self.compile_expr(expr, file),
+            ast::Expr::If { start: _, cond, then, else_ } => self.compile_if(file, cond, then, else_),
             ast::Expr::Block(block) => {
                 self.write_comment(file, "Beginning block")?;
                 for stmt in &block.body {
@@ -379,8 +379,8 @@ format_char_hex_end:
     fn compile_stmt(&mut self, stmt: &ast::Stmt, file: &mut File) -> Result<(), CompileError> {
         match stmt {
             ast::Stmt::Expr(expr) => self.compile_expr(expr, file),
-            ast::Stmt::While { cond, body } => self.compile_while(file, cond, body),
-            ast::Stmt::Assign(name, expr) => self.compile_assign(name, expr, file),
+            ast::Stmt::While { start: _, cond, body } => self.compile_while(file, cond, body),
+            ast::Stmt::Assign(name, expr) => self.compile_assign(&name.text, expr, file),
         }
     }
 

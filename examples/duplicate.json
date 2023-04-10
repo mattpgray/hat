@@ -1,5 +1,5 @@
 {
     "return_code": 1,
-    "stderr": "type error: duplicate reference a\n",
+    "stderr": "/home/mgray/code/hat/examples/duplicate.hat:2:5: type error: duplicate reference a. Previously defined at /home/mgray/code/hat/examples/duplicate.hat:1:5\n",
     "stdout": ""
 }

@@ -1,6 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::ast;
+use crate::{
+    ast::{self, IntrinsicName, Node},
+    lexer,
+};
 
 pub enum Builtin {
     U64,
@@ -25,22 +28,57 @@ impl Builtin {
     }
 }
 
+// TODO: Refactor me into type errors and other kinds of errors. For now, all errors are type
+// errors except for no main function. Type errors should always have a location.
+//
+// TODO: Some of these should take words instead of locations and name.
 #[derive(Debug)]
 pub enum Error {
-    InitializationCycle(String),
-    UnresolvedReference(String),
-    UnsupportedOp { typ: String, op: ast::Op },
-    Mismatch { left: String, right: String },
-    UntypedVariable(String),
-    UnknownType(String),
-    UnexpectedNumberOfTypes { want: usize, got: usize },
+    InitializationCycle(lexer::Loc, String),
+    UnresolvedReference(lexer::Loc, String),
+    UnsupportedOp {
+        loc: lexer::Loc,
+        typ: String,
+        op: ast::Op,
+    },
+    Mismatch {
+        loc: lexer::Loc,
+        left: String,
+        right: String,
+    },
+    UntypedVariable(lexer::Loc, String),
+    UnknownType(lexer::Loc, String),
+    UnexpectedNumberOfTypes {
+        loc: lexer::Loc,
+        want: usize,
+        got: usize,
+    },
+    DuplicateReference {
+        curr: lexer::Loc,
+        prev: lexer::Loc,
+        word: String,
+    },
     NoMainFunction,
-    DuplicateReference(String),
 }
 
 enum Decl<'a> {
     Var(Var<'a>),
     Proc(Proc<'a>),
+}
+
+impl Decl<'_> {
+    fn reference_loc(&self) -> &lexer::Loc {
+        match self {
+            Decl::Var(Var {
+                ast_var: ast::Var { name, .. },
+                ..
+            })
+            | Decl::Proc(Proc {
+                ast_proc: ast::Proc { name, .. },
+                ..
+            }) => &name.start,
+        }
+    }
 }
 
 struct Var<'a> {
@@ -73,8 +111,8 @@ impl Context<'_> {
         let mut context = Context {
             globals: HashMap::new(),
         };
-        for decl in &ast.decls {
-            let (name, decl) = match decl {
+        for ast_decl in &ast.decls {
+            let (name, decl) = match ast_decl {
                 ast::Decl::Var(var) => (
                     &var.name,
                     Decl::Var(Var {
@@ -87,8 +125,12 @@ impl Context<'_> {
                 ),
                 ast::Decl::Proc(proc) => (&proc.name, Decl::Proc(Proc { ast_proc: proc })),
             };
-            if context.globals.insert(name.clone(), decl).is_some() {
-                return Err(Error::DuplicateReference(name.clone()));
+            if let Some(prev) = context.globals.insert(name.text.clone(), decl) {
+                return Err(Error::DuplicateReference {
+                    curr: ast_decl.reference_loc().clone(),
+                    prev: prev.reference_loc().clone(),
+                    word: name.text.clone(),
+                });
             }
         }
 
@@ -108,7 +150,7 @@ impl Context<'_> {
 
         for decl in &ast.decls {
             if let ast::Decl::Var(var) = decl {
-                context.check_var(&var.name)?;
+                context.check_var(&var.name.text)?;
             }
         }
 
@@ -121,7 +163,10 @@ impl Context<'_> {
         let references = {
             self.mut_var(name, |var| {
                 if var.state == CheckState::InProgress {
-                    return Err(Error::InitializationCycle(name.clone()));
+                    return Err(Error::InitializationCycle(
+                        var.ast_var.name.start.clone(),
+                        name.clone(),
+                    ));
                 } else if var.state == CheckState::Unchecked {
                     var.state = CheckState::InProgress;
                 }
@@ -173,7 +218,7 @@ impl Context<'_> {
             match &var.ast_var.value {
                 Some(expr) => {
                     let ret_types = self.check_expr(expr)?;
-                    expect_n(1, ret_types.len())?;
+                    expect_n(expr.start(), 1, ret_types.len())?;
                     Some(ret_types[0].clone())
                 }
                 None => None,
@@ -185,9 +230,10 @@ impl Context<'_> {
                 Some(ret_typ) => {
                     if let Some(ast_typ) = &var.ast_var.typ {
                         // if explicitly specified then it must match.
-                        if ast_typ != &ret_typ {
+                        if ast_typ.text != ret_typ {
                             return Err(Error::Mismatch {
-                                left: ast_typ.clone(),
+                                loc: ast_typ.start.clone(),
+                                left: ast_typ.text.clone(),
                                 right: ret_typ,
                             });
                         }
@@ -196,10 +242,13 @@ impl Context<'_> {
                 }
                 None => match &var.ast_var.typ {
                     Some(typ) => {
-                        var.typ = typ.clone();
+                        var.typ = typ.text.clone();
                     }
                     None => {
-                        return Err(Error::UntypedVariable(name.clone()));
+                        return Err(Error::UntypedVariable(
+                            var.ast_var.name.start.clone(),
+                            name.clone(),
+                        ));
                     }
                 },
             }
@@ -210,10 +259,10 @@ impl Context<'_> {
         Ok(())
     }
 
-    fn check_type(&self, typ: &String) -> Result<(), Error> {
+    fn check_type(&self, word: &ast::Word) -> Result<(), Error> {
         // TODO: User defined types.
-        if Builtin::from_str(typ).is_none() {
-            Err(Error::UnknownType(typ.clone()))
+        if Builtin::from_str(&word.text).is_none() {
+            Err(Error::UnknownType(word.start.clone(), word.text.clone()))
         } else {
             Ok(())
         }
@@ -221,12 +270,12 @@ impl Context<'_> {
 
     fn check_expr(&self, expr: &ast::Expr) -> Result<Vec<String>, Error> {
         match expr {
-            ast::Expr::IntLiteral(_) => Ok(vec![Builtin::U64.to_str().to_string()]),
-            ast::Expr::IntrinsicCall(_, _) => {
-                todo!("Type checking of intrinsic calls in expressions is not implemented yet")
+            ast::Expr::IntLiteral(_, _) => Ok(vec![Builtin::U64.to_str().to_string()]),
+            ast::Expr::IntrinsicCall(IntrinsicName { hash_loc, .. }, _) => {
+                todo!("{hash_loc}: Type checking of intrinsic calls in expressions is not implemented yet")
             }
             ast::Expr::Word(word) => {
-                let decl = self.globals.get(word);
+                let decl = self.globals.get(&word.text);
                 match decl {
                     Some(decl) => match decl {
                         Decl::Var(var) => {
@@ -235,27 +284,37 @@ impl Context<'_> {
                         }
                         Decl::Proc(proc) => Ok(proc.ast_proc.ret_types.clone()),
                     },
-                    None => Err(Error::UnresolvedReference(word.clone())),
+                    None => Err(Error::UnresolvedReference(
+                        word.start.clone(),
+                        word.text.clone(),
+                    )),
                 }
             }
             ast::Expr::Op { left, right, op } => {
-                let left = self.check_expr(left)?;
-                let right = self.check_expr(right)?;
-                expect_n(1, left.len())?;
-                expect_n(1, right.len())?;
-                expect_equal(&left[0], &right[0])?;
-                if let Some(bi_typ) = Builtin::from_str(&left[0]) {
+                let left_types = self.check_expr(left)?;
+                let right_types = self.check_expr(right)?;
+                expect_n(left.start(), 1, left_types.len())?;
+                expect_n(right.start(), 1, right_types.len())?;
+                expect_equal(left.start(), &left_types[0], &right_types[0])?;
+                if let Some(bi_typ) = Builtin::from_str(&left_types[0]) {
                     if bi_typ.supports_op(op) {
-                        return Ok(left);
+                        return Ok(left_types);
                     }
                 }
+                // TODO: Should this be the location of the operand?
                 Err(Error::UnsupportedOp {
-                    typ: left[0].clone(),
+                    loc: left.as_ref().start().clone(),
+                    typ: left_types[0].clone(),
                     op: op.clone(),
                 })
             }
-            ast::Expr::BracketExpr(expr) => self.check_expr(expr),
-            ast::Expr::If { cond, then, else_ } => todo!("type checking if is not implemented yet"),
+            ast::Expr::BracketExpr(_, expr) => self.check_expr(expr),
+            ast::Expr::If {
+                start,
+                cond,
+                then,
+                else_,
+            } => todo!("type checking if is not implemented yet"),
             ast::Expr::Block(_) => todo!("Type checking block is not implemented yet"),
         }
     }
@@ -278,12 +337,15 @@ impl Context<'_> {
         references: &mut HashSet<String>,
     ) -> Result<(), Error> {
         match expr {
-            ast::Expr::IntLiteral(_) | ast::Expr::IntrinsicCall(_, _) => Ok(()),
+            ast::Expr::IntLiteral(_, _) | ast::Expr::IntrinsicCall(_, _) => Ok(()),
             ast::Expr::Word(word) => {
-                if !self.globals.contains_key(word) {
-                    Err(Error::UnresolvedReference(word.clone()))
+                if !self.globals.contains_key(&word.text) {
+                    Err(Error::UnresolvedReference(
+                        word.start.clone(),
+                        word.text.clone(),
+                    ))
                 } else {
-                    references.insert(word.clone());
+                    references.insert(word.text.clone());
                     Ok(())
                 }
             }
@@ -292,8 +354,13 @@ impl Context<'_> {
                 self.append_references(right, references)?;
                 Ok(())
             }
-            ast::Expr::BracketExpr(expr) => self.append_references(expr, references),
-            ast::Expr::If { cond, then, else_ } => {
+            ast::Expr::BracketExpr(_, expr) => self.append_references(expr, references),
+            ast::Expr::If {
+                start: _,
+                cond,
+                then,
+                else_,
+            } => {
                 todo!("Getting references from if is not implemented")
             }
             ast::Expr::Block(_) => todo!("Getting references from blocks is not implemented"),
@@ -326,21 +393,26 @@ impl Context<'_> {
     }
 }
 
-fn expect_equal(left: &String, right: &String) -> Result<(), Error> {
+fn expect_equal(loc: &lexer::Loc, left: &String, right: &String) -> Result<(), Error> {
     if left == right {
         Ok(())
     } else {
         Err(Error::Mismatch {
+            loc: loc.clone(),
             left: left.clone(),
             right: right.clone(),
         })
     }
 }
 
-fn expect_n(want: usize, have: usize) -> Result<(), Error> {
+fn expect_n(loc: &lexer::Loc, want: usize, have: usize) -> Result<(), Error> {
     if want == have {
         Ok(())
     } else {
-        Err(Error::UnexpectedNumberOfTypes { want, got: have })
+        Err(Error::UnexpectedNumberOfTypes {
+            loc: loc.clone(),
+            want,
+            got: have,
+        })
     }
 }

@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+import shlex
 
 
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -35,13 +36,17 @@ def dict_compare(d1, d2):
     return added, removed, modified, same
 
 def run_com(file):
-    com_result = subprocess.run(["./target/release/hat", "com", file], capture_output=True)
+    com_result = run_cmd(["./target/release/hat", "com", file], capture_output=True)
     if com_result.returncode != 0:
         return com_result
-    return subprocess.run(["./out"], capture_output=True)
+    return run_cmd(["./out"], capture_output=True)
 
 def run_sim(file):
-    return subprocess.run(["./target/release/hat", "sim", file], capture_output=True)
+    return run_cmd(["./target/release/hat", "sim", file], capture_output=True)
+
+def run_cmd(cmd_args, *args, **kwargs):
+    print("[cmd]", " ".join(shlex.quote(arg) for arg in cmd_args))
+    return subprocess.run(cmd_args, *args, **kwargs)
 
 def run_tests(args, runner):
     result = 0
@@ -87,8 +92,7 @@ def main() :
     parser.add_argument('-m', '--mode', default="com", help="The mode of hat to test.", choices=("sim", "com"))
     args = parser.parse_args()
 
-    print("Compling hat...")
-    subprocess.run(["cargo", "build", "--release"], check=True)
+    run_cmd(["cargo", "build", "--release"], check=True)
 
     if args.mode == "sim":
         result = run_tests(args, run_sim)
