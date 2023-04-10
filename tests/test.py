@@ -9,9 +9,9 @@ import shlex
 
 
 def test_files():
-    example_dir = "./examples"
-    for f in os.listdir(example_dir):
-        path = os.path.join(example_dir, f)
+    test_dir = "./tests"
+    for f in os.listdir(test_dir):
+        path = os.path.join(test_dir, f)
         if not os.path.isfile(path):
             continue
         _, ext = os.path.splitext(path)

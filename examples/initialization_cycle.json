@@ -1,5 +1,0 @@
-{
-    "return_code": 1,
-    "stderr": "./examples/initialization_cycle.hat:1:5: type error: initialization cycle detected at a\n",
-    "stdout": ""
-}

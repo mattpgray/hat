@@ -1,5 +1,0 @@
-{
-    "return_code": 1,
-    "stderr": "./examples/duplicate.hat:2:5: type error: duplicate reference a. Previously defined at ./examples/duplicate.hat:1:5\n",
-    "stdout": ""
-}
