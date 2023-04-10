@@ -25,10 +25,10 @@ impl Compiler {
         };
 
         let ast = ast::Ast::from_file(in_file)?;
-        types::Context::from(&ast)?;
+        let typ_ctx = types::Context::from(&ast)?;
         {
             let mut out = File::create(&asm_out_file)?;
-            self.compile_ast(&ast, &mut out)?;
+            self.compile_ast(&typ_ctx, &ast, &mut out)?;
         }
         cmd("nasm", &["-felf64", &asm_out_file])?;
         cmd("ld", &[&o_out_file, "-o", out_file.as_str()])?;
@@ -157,14 +157,14 @@ format_char_hex_end:
         Ok(())
     }
 
-    fn compile_ast(&mut self, ast: &ast::Ast, file: &mut File) -> Result<(), CompileError> {
-        self.compile_text(ast, file)?;
+    fn compile_ast(&mut self, typ_ctx: &types::Context, ast: &ast::Ast, file: &mut File) -> Result<(), CompileError> {
+        self.compile_text(typ_ctx, ast, file)?;
         self.compile_data(ast, file)?;
         self.compile_bss(ast, file)?;
         Ok(())
     }
 
-    fn compile_text(&mut self, ast: &ast::Ast, file: &mut File) -> Result<(), CompileError> {
+    fn compile_text(&mut self, typ_ctx: &types::Context, ast: &ast::Ast, file: &mut File) -> Result<(), CompileError> {
         writeln!(file, "section .text")?;
         writeln!(file, "global _start")?;
         // Hard coded print intrinsic - also uses the print buf compile_bss
@@ -182,12 +182,13 @@ format_char_hex_end:
             file,
             "------- begin global variable initialization --------",
         )?;
-        for decl in &ast.decls {
-            match decl {
-                ast::Decl::Proc(_) => continue,
-                ast::Decl::Var(var) => self.compile_global_variable_initialization(var, file)?,
-            }
-        }
+
+        // Use the type context to walk the variable declarations in a safe order.
+        typ_ctx.walk_var_declarations(&mut |var| {
+            self.compile_global_variable_initialization(var.ast_var, file)?;
+            Ok::<_, CompileError>(())
+        })?;
+
         self.write_comment(
             file,
             "------- end global variable initialization ----------",

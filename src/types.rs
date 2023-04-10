@@ -81,12 +81,12 @@ impl Decl<'_> {
     }
 }
 
-struct Var<'a> {
-    ast_var: &'a ast::Var,
-    state: CheckState,
-    typ: String,
-    global_proc_references: Vec<String>,
-    global_var_references: Vec<String>,
+pub struct Var<'a> {
+    pub ast_var: &'a ast::Var,
+    pub state: CheckState,
+    pub typ: String,
+    pub global_proc_references: Vec<String>,
+    pub global_var_references: Vec<String>,
 }
 
 struct Proc<'a> {
@@ -94,7 +94,7 @@ struct Proc<'a> {
 }
 
 #[derive(PartialEq, Eq)]
-enum CheckState {
+pub enum CheckState {
     Checked,
     InProgress,
     Unchecked,
@@ -155,6 +155,47 @@ impl Context<'_> {
         }
 
         Ok(context)
+    }
+
+    // walk the variable declarations in initialization order. This should be safe to call as we
+    // should have already checked for cycles.
+    pub fn walk_var_declarations<F, E>(&self, f: &mut F) -> Result<(), E>
+    where
+        F: FnMut(&Var) -> Result<(), E>,
+    {
+        let mut visited = HashSet::new();
+        for key in self.globals.keys() {
+            self.walk_var_declarations_impl(key, &mut visited, f)?;
+        }
+        Ok(())
+    }
+
+    fn walk_var_declarations_impl<F, E>(&self, key: &String, visited: &mut HashSet<String>, f: &mut F) -> Result<(), E>
+    where
+        F: FnMut(&Var) -> Result<(), E>,
+    {
+            if visited.contains(key) {
+                return Ok(())
+            }
+            let references = {
+                let decl = self.globals.get(key).expect("key exists");
+                match decl {
+                    Decl::Var(var) => {
+                        &var.global_var_references
+                    }
+                    _ => {return Ok(())}
+                }
+            };
+
+            for reference in references {
+                self.walk_var_declarations_impl(reference, visited, f)?;
+            }
+
+            let var = self.get_var(key);
+            f(var)?;
+            visited.insert(key.to_owned());
+
+            Ok(())
     }
 
     fn check_var(&mut self, name: &String) -> Result<(), Error> {

@@ -1,0 +1,9 @@
+var c = b + 1;
+var b = a + 1;
+var a = 1;
+
+proc main() {
+    #print(a); // 1
+    #print(b); // 2
+    #print(c); // 3
+}
