@@ -7,11 +7,11 @@ proc main() {
     #print(test2);
     test2 = 3;
     #print(test2);
-    if test {
+    if test > 0 {
         #print(101);
     }
     test = 0;
-    if test {
+    if test > 0 {
         #print(202);
     }
     #print(test3);

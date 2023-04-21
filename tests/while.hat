@@ -1,7 +1,7 @@
 var cond = 4;
 
 proc main() {
-    while cond {
+    while cond > 0 {
         #print(cond);
         cond = cond - 1;
     }

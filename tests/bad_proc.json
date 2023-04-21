@@ -1,0 +1,5 @@
+{
+    "return_code": 1,
+    "stderr": "./tests/bad_proc.hat:1:1: type error: invalid types in proc return. Want () but found (u64)\n",
+    "stdout": ""
+}

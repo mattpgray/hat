@@ -95,6 +95,11 @@ pub enum Error {
         loc: lexer::Loc,
         name: String,
     },
+    BranchMismatch {
+        loc: lexer::Loc,
+        first: Vec<String>,
+        second: Vec<String>,
+    },
     NoMainFunction,
 }
 
@@ -472,14 +477,18 @@ impl<'a> Context<'a> {
                 // FIXME: Set the parent scope.
                 let mut scope = Scope::new(then, None);
                 self.check_block(proc, &mut scope, then, proc_references, var_references)?;
-                expect_n(&then.start, 1, scope.ret_types.len())?;
                 // The kinds of expression that are allowed here are limited in the ast parsing to
                 // only be if and block
                 if let Some(else_) = else_ {
                     let ret_types =
                         self.check_expr(proc, else_, proc_references, var_references)?;
-                    expect_n(&else_.start(), 1, ret_types.len())?;
-                    expect_equal(start, &scope.ret_types[0], &ret_types[0])?;
+                    if scope.ret_types != ret_types {
+                        return Err(Error::BranchMismatch {
+                            loc: start.clone(),
+                            first: scope.ret_types,
+                            second: ret_types,
+                        });
+                    }
                 }
                 Ok(scope.ret_types)
             }
