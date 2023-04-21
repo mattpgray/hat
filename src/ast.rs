@@ -78,7 +78,7 @@ pub struct Proc {
     pub name: Word,
     // TODO: Args are not accepted.
     pub body: Block,
-    pub ret_types: Vec<String>,
+    pub ret_types: Vec<Word>,
 }
 
 #[derive(Debug, Clone)]

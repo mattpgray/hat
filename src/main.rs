@@ -83,10 +83,23 @@ fn handle_type_err(err: types::Error) -> ! {
         types::Error::UnexpectedNumberOfTypes { loc, want, got } => {
             (Some(loc), format!("expected {want} types but found {got}"))
         }
-        types::Error::DuplicateReference{curr, prev, word} => {
-            (Some(curr), format!("duplicate reference {word}. Previously defined at {prev}"))
-        }
+        types::Error::DuplicateReference { curr, prev, word } => (
+            Some(curr),
+            format!("duplicate reference {word}. Previously defined at {prev}"),
+        ),
         types::Error::NoMainFunction => (None, "no main function".to_string()),
+        types::Error::InvalidAssign { loc, name } => {
+            (Some(loc), format!("cannot assign to {name}"))
+        }
+        types::Error::InvalidReturn { loc, want, got } => (
+            Some(loc),
+            format!(
+                "invalid types in proc return. Want ({}) but found ({})",
+                want.join(", "),
+                got.join(", ")
+            ),
+        ),
+        types::Error::InvalidIntrinsic { loc, name } => (Some(loc), format!("invalid intrinsic #{name}")),
     };
     if let Some(loc) = loc {
         eprintln!("{loc}: type error: {msg}");
