@@ -1,4 +1,7 @@
-use std::collections::{HashMap, HashSet};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+};
 
 use crate::{
     ast::{self, IntrinsicName, Node},
@@ -103,6 +106,12 @@ impl Decl<'_> {
 
 pub struct Var<'a> {
     pub ast_var: &'a ast::Var,
+    // type_info contains information about the var that is discovered at type checking time. It
+    // it in a ref cell so that we can mutate it more easily as we traverse the tree.
+    pub type_info: RefCell<VarTypeInformation>,
+}
+
+pub struct VarTypeInformation {
     pub state: CheckState,
     pub typ: String,
     pub global_proc_references: Vec<String>,
@@ -111,7 +120,7 @@ pub struct Var<'a> {
 
 impl Var<'_> {
     pub fn underlying_typ(&self) -> Builtin {
-        Builtin::from_str(&self.typ).expect("Parsed var should have valid type")
+        Builtin::from_str(&self.type_info.borrow().typ).expect("Parsed var should have valid type")
     }
 }
 
@@ -145,10 +154,12 @@ impl Context<'_> {
                     &var.name,
                     Decl::Var(Var {
                         ast_var: var,
-                        state: CheckState::Unchecked,
-                        typ: "".to_string(),
-                        global_proc_references: vec![],
-                        global_var_references: vec![],
+                        type_info: RefCell::new(VarTypeInformation {
+                            state: CheckState::Unchecked,
+                            typ: "".to_string(),
+                            global_proc_references: vec![],
+                            global_var_references: vec![],
+                        }),
                     }),
                 ),
                 ast::Decl::Proc(proc) => (&proc.name, Decl::Proc(Proc { ast_proc: proc })),
@@ -178,7 +189,8 @@ impl Context<'_> {
 
         for decl in &ast.decls {
             if let ast::Decl::Var(var) = decl {
-                context.check_var(&var.name.text)?;
+                let var = context.get_var(&var.name.text);
+                context.check_var(var)?;
             }
         }
 
@@ -210,16 +222,16 @@ impl Context<'_> {
         if visited.contains(key) {
             return Ok(());
         }
-        let references = {
-            let decl = self.globals.get(key).expect("key exists");
-            match decl {
-                Decl::Var(var) => &var.global_var_references,
-                _ => return Ok(()),
-            }
-        };
 
-        for reference in references {
-            self.walk_var_declarations_impl(reference, visited, f)?;
+        let decl = self.globals.get(key).expect("key exists");
+        match decl {
+            Decl::Var(var) => {
+                let references = &var.type_info.borrow().global_var_references;
+                for reference in references {
+                    self.walk_var_declarations_impl(reference, visited, f)?;
+                }
+            }
+            _ => return Ok(()),
         }
 
         let var = self.get_var(key);
@@ -229,27 +241,28 @@ impl Context<'_> {
         Ok(())
     }
 
-    fn check_var(&mut self, name: &String) -> Result<(), Error> {
-        // First check for cycles and set the var as in progres. Then get the references to other
-        // global declarations that are in the variable definition.
-        let references = {
-            self.mut_var(name, |var| {
-                if var.state == CheckState::InProgress {
-                    return Err(Error::InitializationCycle(
-                        var.ast_var.name.start.clone(),
-                        name.clone(),
-                    ));
-                } else if var.state == CheckState::Unchecked {
-                    var.state = CheckState::InProgress;
-                }
-                Ok(())
-            })?;
-            let var = self.get_var(name);
-            if var.state == CheckState::Checked {
+    fn check_var(&self, var: &Var) -> Result<(), Error> {
+        // First check if we are in a cycle, or if this has already been checked.
+        {
+            let type_info = var.type_info.borrow();
+            if var.type_info.borrow().state == CheckState::Checked {
                 return Ok(());
             }
-            self.var_references(var)?
-        };
+            if type_info.state == CheckState::InProgress {
+                return Err(Error::InitializationCycle(
+                    var.ast_var.name.start.clone(),
+                    var.ast_var.name.text.clone(),
+                ));
+            }
+        }
+        // Now mark as in in progress so that we can detect cycles.
+        {
+            let mut type_info = var.type_info.borrow_mut();
+            type_info.state = CheckState::InProgress;
+        }
+
+        // Release the borrow as we check other variable when getting the references.
+        let references = self.var_references(var)?;
 
         // Not add those references to the var
         let mut proc_references = Vec::new();
@@ -264,25 +277,26 @@ impl Context<'_> {
                 Decl::Proc(_) => proc_references.push(reff),
             }
         }
-        self.mut_var(name, |var| {
-            var.global_var_references = var_references.clone();
-            var.global_proc_references = proc_references.clone();
-            Ok(())
-        })?;
+
+        // Now we can store the references.
+        {
+            let mut type_info = var.type_info.borrow_mut();
+            type_info.global_var_references = var_references.clone();
+            type_info.global_proc_references = proc_references.clone();
+        }
 
         // Now we type check the other variables and procs recursively.
         for name in &var_references {
-            self.check_var(name)?;
+            self.check_var(self.get_var(name))?;
         }
         for name in &proc_references {
             // We do not type check the proc here. We just check for variable cycles within it.
-            self.check_vars_in_proc(name)?;
+            self.check_vars_in_proc(self.get_proc(name))?;
         }
 
         // And finally we can type check the variable we have. All other variables that this
         // depends on should already by type checked.
         let ret_typ = {
-            let var = self.get_var(name);
             // If the type is declared then it must be valid.
             if let Some(typ) = &var.ast_var.typ {
                 self.check_type(typ)?;
@@ -297,36 +311,35 @@ impl Context<'_> {
             }
         };
 
-        self.mut_var(name, |var| {
-            match ret_typ {
-                Some(ret_typ) => {
-                    if let Some(ast_typ) = &var.ast_var.typ {
-                        // if explicitly specified then it must match.
-                        if ast_typ.text != ret_typ {
-                            return Err(Error::Mismatch {
-                                loc: ast_typ.start.clone(),
-                                left: ast_typ.text.clone(),
-                                right: ret_typ,
-                            });
-                        }
+        // Finally we can store the type information in the var
+        let mut type_info = var.type_info.borrow_mut();
+        match ret_typ {
+            Some(ret_typ) => {
+                if let Some(ast_typ) = &var.ast_var.typ {
+                    // if explicitly specified then it must match.
+                    if ast_typ.text != ret_typ {
+                        return Err(Error::Mismatch {
+                            loc: ast_typ.start.clone(),
+                            left: ast_typ.text.clone(),
+                            right: ret_typ,
+                        });
                     }
-                    var.typ = ret_typ;
                 }
-                None => match &var.ast_var.typ {
-                    Some(typ) => {
-                        var.typ = typ.text.clone();
-                    }
-                    None => {
-                        return Err(Error::UntypedVariable(
-                            var.ast_var.name.start.clone(),
-                            name.clone(),
-                        ));
-                    }
-                },
+                type_info.typ = ret_typ;
             }
-            var.state = CheckState::Checked;
-            Ok(())
-        })?;
+            None => match &var.ast_var.typ {
+                Some(typ) => {
+                    type_info.typ = typ.text.clone();
+                }
+                None => {
+                    return Err(Error::UntypedVariable(
+                        var.ast_var.name.start.clone(),
+                        var.ast_var.name.text.clone(),
+                    ));
+                }
+            },
+        }
+        type_info.state = CheckState::Checked;
 
         Ok(())
     }
@@ -351,8 +364,8 @@ impl Context<'_> {
                 match decl {
                     Some(decl) => match decl {
                         Decl::Var(var) => {
-                            assert!(var.state == CheckState::Checked);
-                            Ok(vec![var.typ.clone()])
+                            assert!(var.type_info.borrow().state == CheckState::Checked);
+                            Ok(vec![var.type_info.borrow().typ.clone()])
                         }
                         Decl::Proc(proc) => Ok(proc.ast_proc.ret_types.clone()),
                     },
@@ -397,7 +410,7 @@ impl Context<'_> {
         }
     }
 
-    fn check_vars_in_proc(&mut self, name: &String) -> Result<(), Error> {
+    fn check_vars_in_proc(&self, proc: &Proc) -> Result<(), Error> {
         todo!("Checking for inintialization cyclces within function bodies is not implemented");
     }
 
@@ -454,19 +467,12 @@ impl Context<'_> {
         }
     }
 
-    // mut_var looks weird and that is because of rust being a pain in the ass. We cannot get
-    // another reference to any member of the hashset if we have a mutable reference to one of
-    // them. This function allows for the most common use case, mutating the hashset when we know
-    // that the key contains a variable declaration.
-    fn mut_var<F>(&mut self, name: &String, f: F) -> Result<(), Error>
-    where
-        F: FnOnce(&mut Var) -> Result<(), Error>,
-    {
-        let decl = self.globals.get_mut(name).expect("variable should exist");
-        if let Decl::Var(var) = decl {
-            f(var)
+    fn get_proc(&self, name: &String) -> &Proc {
+        let decl = self.globals.get(name).expect("procedure should exist");
+        if let Decl::Proc(proc) = decl {
+            proc
         } else {
-            panic!("Should not have got a decl that was not a var");
+            panic!("Should not have got a decl that was not a proc");
         }
     }
 }

@@ -490,8 +490,8 @@ format_char_hex_end:
                     .get(&word.text)
                     .expect("should be type checked");
                 match res {
-                    types::Decl::Var(var) => types::Builtin::from_str(&var.typ)
-                        .expect(&format!("All types should be builtin at the moment: {}", &var.typ)),
+                    types::Decl::Var(var) => types::Builtin::from_str(&var.type_info.borrow().typ)
+                        .expect(&format!("All types should be builtin at the moment: {}", &var.type_info.borrow().typ)),
                     types::Decl::Proc(_) => todo!("proc call returns are not implemented yet"),
                 }
             }
