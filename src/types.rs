@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    ast::{self, IntrinsicName, Node},
+    ast::{self, Node},
     lexer,
 };
 
@@ -90,10 +90,6 @@ pub enum Error {
         loc: lexer::Loc,
         want: Vec<String>,
         got: Vec<String>,
-    },
-    InvalidIntrinsic {
-        loc: lexer::Loc,
-        name: String,
     },
     BranchMismatch {
         loc: lexer::Loc,
@@ -399,18 +395,9 @@ impl<'a> Context<'a> {
     ) -> Result<Vec<String>, Error> {
         match expr {
             ast::Expr::IntLiteral(_, _) => Ok(vec![Builtin::U64.to_str().to_string()]),
-            ast::Expr::IntrinsicCall(IntrinsicName { hash_loc, name }, args) => {
-                match name.text.as_str() {
-                    "print" | "print_binary" | "print_hex" => {}
-                    _ => {
-                        return Err(Error::InvalidIntrinsic {
-                            loc: hash_loc.clone(),
-                            name: name.text.clone(),
-                        });
-                    }
-                }
+            ast::Expr::IntrinsicCall(word, _,  args) => {
                 // All the intrinsics have the same signature for now.
-                expect_n(hash_loc, 1, args.len())?;
+                expect_n(&word.start, 1, args.len())?;
                 self.check_expr(proc, &args[0], var_references, proc_references)?;
                 Ok(vec![])
             }

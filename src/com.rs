@@ -22,10 +22,7 @@ pub fn compile(in_file: String, out_file: String) -> Result<(), CompileError> {
 }
 
 impl Compiler<'_, '_> {
-    pub fn compile(
-        &mut self,
-        out_file: String,
-    ) -> Result<(), CompileError> {
+    pub fn compile(&mut self, out_file: String) -> Result<(), CompileError> {
         let asm_out_file = {
             let mut path = PathBuf::from(&out_file);
             path.set_extension("asm");
@@ -212,20 +209,14 @@ format_char_hex_end:
         Ok(())
     }
 
-    fn compile_ast(
-        &mut self,
-        file: &mut File,
-    ) -> Result<(), CompileError> {
+    fn compile_ast(&mut self, file: &mut File) -> Result<(), CompileError> {
         self.compile_text(file)?;
         self.compile_data(file)?;
         self.compile_bss(file)?;
         Ok(())
     }
 
-    fn compile_text(
-        &mut self,
-        file: &mut File,
-    ) -> Result<(), CompileError> {
+    fn compile_text(&mut self, file: &mut File) -> Result<(), CompileError> {
         writeln!(file, "section .text")?;
         writeln!(file, "global _start")?;
         // Hard coded print intrinsic - also uses the print buf compile_bss
@@ -263,10 +254,7 @@ format_char_hex_end:
         Ok(())
     }
 
-    fn compile_data(
-        &mut self,
-        file: &mut File,
-    ) -> Result<(), CompileError> {
+    fn compile_data(&mut self, file: &mut File) -> Result<(), CompileError> {
         writeln!(file, "section .data")?;
         for (name, decl) in &self.typ_ctx.globals {
             match decl {
@@ -328,8 +316,8 @@ format_char_hex_end:
                 writeln!(file, "        mov rax, {}", num)?;
                 Ok(())
             }
-            ast::Expr::IntrinsicCall(name, exprs) => {
-                self.compile_interinsic_call(&name.name.text, exprs, file)
+            ast::Expr::IntrinsicCall(_, intrinsic, exprs) => {
+                self.compile_interinsic_call(intrinsic, exprs, file)
             }
             ast::Expr::Word(word) => {
                 writeln!(file, "        mov rax, [{}]", word.text)?;
@@ -482,7 +470,7 @@ format_char_hex_end:
     fn expr_base_type(&self, expr: &ast::Expr) -> types::Builtin {
         match expr {
             ast::Expr::IntLiteral(_, _) => types::Builtin::U64,
-            ast::Expr::IntrinsicCall(_, _) => panic!("Should be type checked"),
+            ast::Expr::IntrinsicCall(_, _, _) => panic!("Should be type checked"),
             ast::Expr::Word(word) => {
                 let res = self
                     .typ_ctx
@@ -491,7 +479,10 @@ format_char_hex_end:
                     .expect("should be type checked");
                 match res {
                     types::Decl::Var(var) => types::Builtin::from_str(&var.type_info.borrow().typ)
-                        .expect(&format!("All types should be builtin at the moment: {}", &var.type_info.borrow().typ)),
+                        .expect(&format!(
+                            "All types should be builtin at the moment: {}",
+                            &var.type_info.borrow().typ
+                        )),
                     types::Decl::Proc(_) => todo!("proc call returns are not implemented yet"),
                 }
             }
@@ -499,8 +490,7 @@ format_char_hex_end:
                 ast::Op::Add | ast::Op::Mul | ast::Op::Div | ast::Op::Sub => {
                     self.expr_base_type(left)
                 }
-                ast::Op::Gt
-                | ast::Op::Lt => types::Builtin::Bool,
+                ast::Op::Gt | ast::Op::Lt => types::Builtin::Bool,
             },
             ast::Expr::BracketExpr(_, expr) => self.expr_base_type(expr),
             ast::Expr::If {
@@ -517,12 +507,12 @@ format_char_hex_end:
 
     fn compile_interinsic_call(
         &mut self,
-        name: &str,
+        intrinsic: &ast::Intrinsic,
         exprs: &Vec<ast::Expr>,
         file: &mut File,
     ) -> Result<(), CompileError> {
-        match name {
-            "print" => {
+        match intrinsic {
+            ast::Intrinsic::Print => {
                 assert!(exprs.len() == 1, "unexpected number of arguments");
                 self.compile_expr(&exprs[0], file)?;
                 match self.expr_base_type(&exprs[0]) {
@@ -535,20 +525,18 @@ format_char_hex_end:
                     }
                 }
             }
-            "print_hex" => {
+            ast::Intrinsic::PrintHex => {
                 assert!(exprs.len() == 1, "unexpected number of arguments");
                 self.compile_expr(&exprs[0], file)?;
                 writeln!(file, "        mov rcx, 16")?; // The base
                 writeln!(file, "        call print_uint64")?;
             }
-            "print_binary" => {
+            ast::Intrinsic::PrintBinary => {
                 assert!(exprs.len() == 1, "unexpected number of arguments");
                 self.compile_expr(&exprs[0], file)?;
                 writeln!(file, "        mov rcx, 2")?; // The base
                 writeln!(file, "        call print_uint64")?;
             }
-            // This will be caught during type checking eventually. No need for a good error now.
-            _ => panic!("unknown intrinsic: {}", name),
         }
         Ok(())
     }

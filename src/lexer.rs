@@ -3,6 +3,7 @@ use std::fs;
 
 #[derive(Debug)]
 pub enum SyntaxError {
+    InvalidIntrinsic(Loc, String),
     InvalidToken(Loc, char),
     UnclosedStringLiteral(Loc),
     UnexpectedToken {
@@ -27,6 +28,7 @@ impl SyntaxError {
             | SyntaxError::UnexectedEOF(loc)
             | SyntaxError::UnclosedStringLiteral(loc)
             | SyntaxError::InvalidInjection(loc, _, _)
+            | SyntaxError::InvalidIntrinsic(loc, _)
             | SyntaxError::UnmatchedBracket(loc, _) => loc,
         }
     }
@@ -63,6 +65,7 @@ impl fmt::Display for SyntaxError {
             SyntaxError::InvalidInjection(_, file_path, err) => {
                 write!(f, "could not read injected file {file_path}, {err}")
             }
+            SyntaxError::InvalidIntrinsic(_, name) => write!(f, "invalid intrinsic {name}"),
         }
     }
 }
@@ -102,7 +105,6 @@ pub enum TokenKind {
     CloseParen,
     SemiColon,
     Colon,
-    Hash,
     Comma,
 
     // Operators
@@ -118,6 +120,7 @@ pub enum TokenKind {
     IntLiteral,
     StringLiteral,
     Word,
+    Intrinsic,
 
     // Keywords
     Proc,
@@ -141,7 +144,7 @@ impl fmt::Display for TokenKind {
             TokenKind::SemiColon => write!(f, ";"),
             TokenKind::Colon => write!(f, ":"),
             TokenKind::Comma => write!(f, ","),
-            TokenKind::Hash => write!(f, "#"),
+            TokenKind::Intrinsic => write!(f, "intrinsic"),
             TokenKind::Eq => write!(f, "="),
             TokenKind::Minus => write!(f, "-"),
             TokenKind::Add => write!(f, "+"),
@@ -345,11 +348,15 @@ impl Lexer {
                 loc,
                 text: c.to_string(),
             }),
-            '#' => Ok(Token {
-                kind: TokenKind::Hash,
-                loc,
-                text: c.to_string(),
-            }),
+            '#' => {
+                let mut intrinsic = c.to_string();
+                self.append_predicate(&mut intrinsic, char_is_word);
+                Ok(Token {
+                    kind: TokenKind::Intrinsic,
+                    loc,
+                    text: intrinsic,
+                })
+            }
             '=' => Ok(Token {
                 kind: TokenKind::Eq,
                 loc,

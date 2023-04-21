@@ -99,9 +99,6 @@ fn handle_type_err(err: types::Error) -> ! {
                 got.join(", ")
             ),
         ),
-        types::Error::InvalidIntrinsic { loc, name } => {
-            (Some(loc), format!("invalid intrinsic #{name}"))
-        }
         types::Error::BranchMismatch { loc, first, second } => (
             Some(loc),
             format!(

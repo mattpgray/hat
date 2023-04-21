@@ -22,24 +22,6 @@ impl Word {
     }
 }
 
-// TODO: Refactor intrinsics to require the hash to be part of the word and then remove this
-// struct and only use Word.
-
-#[derive(Debug, Clone)]
-pub struct IntrinsicName {
-    pub hash_loc: Loc,
-    pub name: Word,
-}
-
-impl IntrinsicName {
-    fn from(hash_loc: Loc, tok: Token) -> Self {
-        IntrinsicName {
-            hash_loc,
-            name: Word::from(tok),
-        }
-    }
-}
-
 // Node is a set of common methods for each node of the ast.
 pub trait Node {
     fn start(&self) -> &Loc;
@@ -56,6 +38,13 @@ impl From<SyntaxError> for ASTError {
     fn from(err: SyntaxError) -> Self {
         ASTError::SyntaxError(err)
     }
+}
+
+#[derive(Debug, Clone)]
+pub enum Intrinsic {
+    Print,
+    PrintBinary,
+    PrintHex,
 }
 
 #[derive(Debug)]
@@ -157,7 +146,7 @@ pub struct Block {
 #[derive(Debug, Clone)]
 pub enum Expr {
     IntLiteral(Loc, u64),
-    IntrinsicCall(IntrinsicName, Vec<Expr>),
+    IntrinsicCall(Word, Intrinsic, Vec<Expr>),
     Word(Word),
     Op {
         left: Box<Expr>,
@@ -187,12 +176,7 @@ impl Node for Expr {
     fn start(&self) -> &Loc {
         match self {
             Expr::IntLiteral(start, _)
-            | Expr::IntrinsicCall(
-                IntrinsicName {
-                    hash_loc: start, ..
-                },
-                _,
-            )
+            | Expr::IntrinsicCall(Word { start, .. }, _, _)
             | Expr::Word(Word { start, .. })
             | Expr::BracketExpr(start, _)
             | Expr::If {
@@ -266,7 +250,7 @@ impl Expr {
             | TokenKind::CloseParen
             | TokenKind::SemiColon
             | TokenKind::Colon
-            | TokenKind::Hash
+            | TokenKind::Intrinsic
             | TokenKind::Comma
             | TokenKind::Eq
             | TokenKind::IntLiteral
@@ -289,9 +273,8 @@ impl Expr {
                 let tok = l.next()?;
                 Self::parse_word_expr(l, &tok)
             }
-            TokenKind::Hash => {
-                let hash_loc = l.next()?.loc;
-                let name_tok = expect_token_kind(l, TokenKind::Word)?;
+            TokenKind::Intrinsic => {
+                let intrinsic_tok = l.next()?;
                 expect_token_kind(l, TokenKind::OpenParen)?;
                 let mut args = Vec::new();
                 loop {
@@ -323,8 +306,20 @@ impl Expr {
                         }
                     }
                 }
+                let intrinsic = match intrinsic_tok.text.as_str() {
+                    "#print" => Intrinsic::Print,
+                    "#print_binary" => Intrinsic::PrintBinary,
+                    "#print_hex" => Intrinsic::PrintHex,
+                    _ => {
+                        return Err(SyntaxError::InvalidIntrinsic(
+                            intrinsic_tok.loc.clone(),
+                            intrinsic_tok.text.clone(),
+                        ));
+                    }
+                };
                 Ok(Expr::IntrinsicCall(
-                    IntrinsicName::from(hash_loc, name_tok),
+                    Word::from(intrinsic_tok),
+                    intrinsic,
                     args,
                 ))
             }
@@ -382,8 +377,11 @@ impl Expr {
                 vec![
                     TokenKind::Word,
                     TokenKind::Minus,
-                    TokenKind::Hash,
+                    TokenKind::Intrinsic,
                     TokenKind::IntLiteral,
+                    TokenKind::OpenParen,
+                    TokenKind::OpenCurly,
+                    TokenKind::If,
                 ],
             )),
         }
