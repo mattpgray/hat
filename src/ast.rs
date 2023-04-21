@@ -66,6 +66,12 @@ pub struct Var {
     pub typ: Option<Word>,
 }
 
+impl Node for Var {
+    fn start(&self) -> &Loc {
+        &self.start
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Proc {
     pub start: Loc,

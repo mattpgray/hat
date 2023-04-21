@@ -136,8 +136,7 @@ fn main() {
     match subcommand.as_str() {
         "com" => {
             let compile_args = parse_compile_args(args);
-            let mut c = com::Compiler::default();
-            c.compile(compile_args.in_file, compile_args.out_file)
+            com::compile(compile_args.in_file, compile_args.out_file)
                 .unwrap_or_else(|err| handle_compile_err(err));
         }
         "ast" => {

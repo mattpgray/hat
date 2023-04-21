@@ -1,4 +1,4 @@
-use crate::types;
+use crate::types::{self, Builtin};
 
 use super::ast;
 use std::fs::File;
@@ -6,13 +6,26 @@ use std::io::prelude::*;
 use std::path::PathBuf;
 use std::process::Command;
 
-#[derive(Default)]
-pub struct Compiler {
+pub struct Compiler<'a, 'b> {
     n_jumps: usize, // Incremented as we go
+    typ_ctx: &'a types::Context<'b>,
 }
 
-impl Compiler {
-    pub fn compile(&mut self, in_file: String, out_file: String) -> Result<(), CompileError> {
+pub fn compile(in_file: String, out_file: String) -> Result<(), CompileError> {
+    let ast = ast::Ast::from_file(in_file)?;
+    let typ_ctx = types::Context::from(&ast)?;
+    let mut compiler = Compiler {
+        n_jumps: 0,
+        typ_ctx: &typ_ctx,
+    };
+    compiler.compile(out_file)
+}
+
+impl Compiler<'_, '_> {
+    pub fn compile(
+        &mut self,
+        out_file: String,
+    ) -> Result<(), CompileError> {
         let asm_out_file = {
             let mut path = PathBuf::from(&out_file);
             path.set_extension("asm");
@@ -24,11 +37,9 @@ impl Compiler {
             path.to_str().expect("setting extension to work").to_owned()
         };
 
-        let ast = ast::Ast::from_file(in_file)?;
-        let typ_ctx = types::Context::from(&ast)?;
         {
             let mut out = File::create(&asm_out_file)?;
-            self.compile_ast(&typ_ctx, &ast, &mut out)?;
+            self.compile_ast(&mut out)?;
         }
         cmd("nasm", &["-felf64", &asm_out_file])?;
         cmd("ld", &[&o_out_file, "-o", out_file.as_str()])?;
@@ -36,7 +47,7 @@ impl Compiler {
     }
 
     fn compile_print(&self, file: &mut File) -> Result<(), CompileError> {
-        self.write_comment(
+        writeln!(
             file,
             "; -------------------- begin print intrinsic ---------",
         )?;
@@ -45,13 +56,57 @@ impl Compiler {
             "
 ; inputs
 ; ------
-; rax: uint64 to format
-; rcx: base
+; rax: bool to format
+print_bool:
+    mov rsi, print_buf         ; Set si to the start of the buffer
+    call format_bool
+    mov rsi, print_buf         ; format_uint64 can change rsi
+
+    call print_
+    ret
+
+format_bool:
+    cmp rax, 0
+    je format_bool_false
+
+format_bool_true:
+    mov rdx, 4
+    mov byte [rsi], 't'
+    inc rsi
+    mov byte [rsi], 'r'
+    inc rsi
+    mov byte [rsi], 'u'
+    inc rsi
+    mov byte [rsi], 'e'
+    ret
+
+format_bool_false:
+    mov rdx, 5
+    mov byte [rsi], 'f'
+    inc rsi
+    mov byte [rsi], 'a'
+    inc rsi
+    mov byte [rsi], 'l'
+    inc rsi
+    mov byte [rsi], 's'
+    inc rsi
+    mov byte [rsi], 'e'
+    ret
+
 print_uint64:
     mov rsi, print_buf         ; Set si to the start of the buffer
     call format_uint64
     mov rsi, print_buf         ; format_uint64 can change rsi
 
+    call print_
+    ret
+
+; inputs
+; ------
+; rsi: buffer pointer - must be big enough. Not bounds checked.
+;      Might be changed through execution.
+; rdx: The number of bytes in the buffer.
+print_:
     ; Add the newline at the end of the buf
     mov rbx, rdx
     add rbx, rsi
@@ -150,27 +205,33 @@ format_char_hex_end:
     ret
 "
         )?;
-        self.write_comment(
+        writeln!(
             file,
             "; -------------------- end print intrinsic -----------",
         )?;
         Ok(())
     }
 
-    fn compile_ast(&mut self, typ_ctx: &types::Context, ast: &ast::Ast, file: &mut File) -> Result<(), CompileError> {
-        self.compile_text(typ_ctx, ast, file)?;
-        self.compile_data(ast, file)?;
-        self.compile_bss(ast, file)?;
+    fn compile_ast(
+        &mut self,
+        file: &mut File,
+    ) -> Result<(), CompileError> {
+        self.compile_text(file)?;
+        self.compile_data(file)?;
+        self.compile_bss(file)?;
         Ok(())
     }
 
-    fn compile_text(&mut self, typ_ctx: &types::Context, ast: &ast::Ast, file: &mut File) -> Result<(), CompileError> {
+    fn compile_text(
+        &mut self,
+        file: &mut File,
+    ) -> Result<(), CompileError> {
         writeln!(file, "section .text")?;
         writeln!(file, "global _start")?;
         // Hard coded print intrinsic - also uses the print buf compile_bss
         self.compile_print(file)?;
 
-        for decl in &ast.decls {
+        for decl in &self.typ_ctx.ast.decls {
             match decl {
                 ast::Decl::Proc(proc) => self.compile_proc(proc, file)?,
                 ast::Decl::Var(_) => continue,
@@ -178,20 +239,20 @@ format_char_hex_end:
         }
 
         writeln!(file, "_start:")?;
-        self.write_comment(
+        writeln!(
             file,
-            "------- begin global variable initialization --------",
+            "; ------- begin global variable initialization --------",
         )?;
 
         // Use the type context to walk the variable declarations in a safe order.
-        typ_ctx.walk_var_declarations(&mut |var| {
+        self.typ_ctx.walk_var_declarations(&mut |var| {
             self.compile_global_variable_initialization(var.ast_var, file)?;
             Ok::<_, CompileError>(())
         })?;
 
-        self.write_comment(
+        writeln!(
             file,
-            "------- end global variable initialization ----------",
+            "; ------- end global variable initialization ----------",
         )?;
 
         writeln!(file, "        call main")?;
@@ -202,18 +263,27 @@ format_char_hex_end:
         Ok(())
     }
 
-    fn compile_data(&mut self, ast: &ast::Ast, file: &mut File) -> Result<(), CompileError> {
+    fn compile_data(
+        &mut self,
+        file: &mut File,
+    ) -> Result<(), CompileError> {
         writeln!(file, "section .data")?;
-        for decl in &ast.decls {
+        for (name, decl) in &self.typ_ctx.globals {
             match decl {
-                ast::Decl::Var(var) => writeln!(file, "        {}: dq 0", var.name.text)?,
-                ast::Decl::Proc(_) => continue,
+                types::Decl::Var(var) => {
+                    match var.underlying_typ() {
+                        types::Builtin::U64 => writeln!(file, "        {}: dq 0", name)?,
+                        // FIXME: We should not be using a qword for a boolean
+                        types::Builtin::Bool => writeln!(file, "        {}: dq 0", name)?,
+                    }
+                }
+                types::Decl::Proc(_) => continue,
             }
         }
         Ok(())
     }
 
-    fn compile_bss(&mut self, _ast: &ast::Ast, file: &mut File) -> Result<(), CompileError> {
+    fn compile_bss(&mut self, file: &mut File) -> Result<(), CompileError> {
         writeln!(file, "section .bss")?;
         writeln!(
             file,
@@ -228,6 +298,7 @@ format_char_hex_end:
         file: &mut File,
     ) -> Result<(), CompileError> {
         if let Some(expr) = &var.value {
+            self.write_comment(file, var, &format!("init var {}", var.name.text))?;
             self.compile_assign(&var.name.text, expr, file)?;
         }
         Ok(())
@@ -251,6 +322,7 @@ format_char_hex_end:
     }
 
     fn compile_expr(&mut self, expr: &ast::Expr, file: &mut File) -> Result<(), CompileError> {
+        self.write_comment(file, expr, "expr")?;
         match expr {
             ast::Expr::IntLiteral(_, num) => {
                 writeln!(file, "        mov rax, {}", num)?;
@@ -273,26 +345,15 @@ format_char_hex_end:
                 writeln!(file, "        pop rbx")?;
                 match op {
                     ast::Op::Sub => {
-                        self.write_comment(file, "subtracting rhs rbx from lhs rax into rax")?;
                         writeln!(file, "        sub rax, rbx")?;
                     }
                     ast::Op::Add => {
-                        self.write_comment(file, "adding lhs rax for rhs rbx into rax")?;
                         writeln!(file, "        add rax, rbx")?;
                     }
                     ast::Op::Mul => {
-                        self.write_comment(file,"mul multiplies rax by the arg and then stores the result in rax and rdx")?;
-                        self.write_comment(file, "to account for overflows. We ignore overflows.")?;
-                        self.write_comment(file, "lhs is already in rax.")?;
                         writeln!(file, "        mul rbx")?;
                     }
                     ast::Op::Div => {
-                        self.write_comment(
-                            file,
-                            "div divides the dividend rdx:rax by the argument and stores the",
-                        )?;
-                        self.write_comment(file, "resulting quotient in rax and remainder in rdx")?;
-                        self.write_comment(file,"We already have the lhs in rax, so we set rdx to zero as we do not need it.")?;
                         writeln!(file, "        mov rdx, 0")?;
                         writeln!(file, "        div rbx")?;
                     }
@@ -314,14 +375,17 @@ format_char_hex_end:
                 Ok(())
             }
             ast::Expr::BracketExpr(_, expr) => self.compile_expr(expr, file),
-            ast::Expr::If { start: _, cond, then, else_ } => self.compile_if(file, cond, then, else_),
+            ast::Expr::If {
+                start: _,
+                cond,
+                then,
+                else_,
+            } => self.compile_if(file, cond, then, else_),
             ast::Expr::Block(block) => {
-                self.write_comment(file, "Beginning block")?;
                 for stmt in &block.body {
                     self.compile_stmt(stmt, file)?;
                 }
                 if let Some(ret_expr) = &block.ret_expr {
-                    self.write_comment(file, "Block return expression.")?;
                     self.compile_expr(ret_expr, file)?;
                 }
                 Ok(())
@@ -382,17 +446,24 @@ format_char_hex_end:
         Ok(())
     }
 
-    fn write_comment(&self, file: &mut File, msg: &str) -> Result<(), CompileError> {
-        // TODO: Line numbers. Pass trait into write comment what has file name and number.
-        write!(file, "; ")?;
-        writeln!(file, "{}", msg)?;
+    fn write_comment(
+        &self,
+        file: &mut File,
+        node: &impl ast::Node,
+        msg: &str,
+    ) -> Result<(), CompileError> {
+        writeln!(file, "; {} {}", node.start(), msg)?;
         Ok(())
     }
 
     fn compile_stmt(&mut self, stmt: &ast::Stmt, file: &mut File) -> Result<(), CompileError> {
         match stmt {
             ast::Stmt::Expr(expr) => self.compile_expr(expr, file),
-            ast::Stmt::While { start: _, cond, body } => self.compile_while(file, cond, body),
+            ast::Stmt::While {
+                start: _,
+                cond,
+                body,
+            } => self.compile_while(file, cond, body),
             ast::Stmt::Assign(name, expr) => self.compile_assign(&name.text, expr, file),
         }
     }
@@ -404,8 +475,44 @@ format_char_hex_end:
         file: &mut File,
     ) -> Result<(), CompileError> {
         self.compile_expr(expr, file)?;
-        writeln!(file, "        mov qword [{}], rax", name)?;
+        writeln!(file, "        mov byte [{}], al", name)?;
         Ok(())
+    }
+
+    fn expr_base_type(&self, expr: &ast::Expr) -> types::Builtin {
+        match expr {
+            ast::Expr::IntLiteral(_, _) => types::Builtin::U64,
+            ast::Expr::IntrinsicCall(_, _) => panic!("Should be type checked"),
+            ast::Expr::Word(word) => {
+                let res = self
+                    .typ_ctx
+                    .globals
+                    .get(&word.text)
+                    .expect("should be type checked");
+                match res {
+                    types::Decl::Var(var) => types::Builtin::from_str(&var.typ)
+                        .expect(&format!("All types should be builtin at the moment: {}", &var.typ)),
+                    types::Decl::Proc(_) => todo!("proc call returns are not implemented yet"),
+                }
+            }
+            ast::Expr::Op { left, right: _, op } => match op {
+                ast::Op::Add | ast::Op::Mul | ast::Op::Div | ast::Op::Sub => {
+                    self.expr_base_type(left)
+                }
+                ast::Op::Gt
+                | ast::Op::Lt => types::Builtin::Bool,
+            },
+            ast::Expr::BracketExpr(_, expr) => self.expr_base_type(expr),
+            ast::Expr::If {
+                start: _,
+                cond: _,
+                then,
+                else_: _,
+            } => self.expr_base_type(then.ret_expr.as_ref().expect("should be type checked")),
+            ast::Expr::Block(block) => {
+                self.expr_base_type(block.ret_expr.as_ref().expect("should be type checked"))
+            }
+        }
     }
 
     fn compile_interinsic_call(
@@ -418,8 +525,15 @@ format_char_hex_end:
             "print" => {
                 assert!(exprs.len() == 1, "unexpected number of arguments");
                 self.compile_expr(&exprs[0], file)?;
-                writeln!(file, "        mov rcx, 10")?; // The base
-                writeln!(file, "        call print_uint64")?;
+                match self.expr_base_type(&exprs[0]) {
+                    Builtin::U64 => {
+                        writeln!(file, "        mov rcx, 10")?; // The base
+                        writeln!(file, "        call print_uint64")?;
+                    }
+                    Builtin::Bool => {
+                        writeln!(file, "        call print_bool")?;
+                    }
+                }
             }
             "print_hex" => {
                 assert!(exprs.len() == 1, "unexpected number of arguments");
@@ -439,13 +553,12 @@ format_char_hex_end:
         Ok(())
     }
 
-    fn next_jump_idx( &mut self,) -> usize{
+    fn next_jump_idx(&mut self) -> usize {
         let jump_idx = self.n_jumps;
         self.n_jumps += 1;
         jump_idx
     }
 }
-
 
 #[derive(Debug)]
 pub enum CompileError {

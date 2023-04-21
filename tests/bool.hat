@@ -1,0 +1,13 @@
+inject "../stdlib/bool.hat";
+
+proc main () {
+    #print(true);
+    #print(false);
+    if true {
+        #print(true);
+    }
+    if false {
+        #print(false);
+    }
+    #print(0);
+}

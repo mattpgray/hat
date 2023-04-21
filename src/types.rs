@@ -7,23 +7,43 @@ use crate::{
 
 pub enum Builtin {
     U64,
+    Bool,
 }
 
 impl Builtin {
-    fn from_str(str: &str) -> Option<Builtin> {
+    pub fn from_str(str: &str) -> Option<Builtin> {
         match str {
             "u64" => Some(Builtin::U64),
+            "bool" => Some(Builtin::Bool),
             _ => None,
         }
     }
 
-    fn supports_op(&self, op: &ast::Op) -> bool {
-        true // TODO: This will not always be true.
-    }
-
-    fn to_str(&self) -> &str {
+    pub fn to_str(&self) -> &str {
         match self {
             Builtin::U64 => "u64",
+            Builtin::Bool => "bool",
+        }
+    }
+
+    fn supports_op(&self, op: &ast::Op) -> bool {
+        match self {
+            Builtin::U64 => match op {
+                ast::Op::Sub
+                | ast::Op::Add
+                | ast::Op::Mul
+                | ast::Op::Div
+                | ast::Op::Gt
+                | ast::Op::Lt => true,
+            },
+            Builtin::Bool => match op {
+                ast::Op::Sub
+                | ast::Op::Add
+                | ast::Op::Mul
+                | ast::Op::Div
+                | ast::Op::Gt
+                | ast::Op::Lt => false,
+            },
         }
     }
 }
@@ -61,7 +81,7 @@ pub enum Error {
     NoMainFunction,
 }
 
-enum Decl<'a> {
+pub enum Decl<'a> {
     Var(Var<'a>),
     Proc(Proc<'a>),
 }
@@ -89,7 +109,13 @@ pub struct Var<'a> {
     pub global_var_references: Vec<String>,
 }
 
-struct Proc<'a> {
+impl Var<'_> {
+    pub fn underlying_typ(&self) -> Builtin {
+        Builtin::from_str(&self.typ).expect("Parsed var should have valid type")
+    }
+}
+
+pub struct Proc<'a> {
     ast_proc: &'a ast::Proc,
 }
 
@@ -101,7 +127,8 @@ pub enum CheckState {
 }
 
 pub struct Context<'a> {
-    globals: HashMap<String, Decl<'a>>,
+    pub globals: HashMap<String, Decl<'a>>,
+    pub ast: &'a ast::Ast,
 }
 
 impl Context<'_> {
@@ -110,6 +137,7 @@ impl Context<'_> {
     pub fn from<'a>(ast: &'a ast::Ast) -> Result<Context<'a>, Error> {
         let mut context = Context {
             globals: HashMap::new(),
+            ast,
         };
         for ast_decl in &ast.decls {
             let (name, decl) = match ast_decl {
@@ -170,32 +198,35 @@ impl Context<'_> {
         Ok(())
     }
 
-    fn walk_var_declarations_impl<F, E>(&self, key: &String, visited: &mut HashSet<String>, f: &mut F) -> Result<(), E>
+    fn walk_var_declarations_impl<F, E>(
+        &self,
+        key: &String,
+        visited: &mut HashSet<String>,
+        f: &mut F,
+    ) -> Result<(), E>
     where
         F: FnMut(&Var) -> Result<(), E>,
     {
-            if visited.contains(key) {
-                return Ok(())
+        if visited.contains(key) {
+            return Ok(());
+        }
+        let references = {
+            let decl = self.globals.get(key).expect("key exists");
+            match decl {
+                Decl::Var(var) => &var.global_var_references,
+                _ => return Ok(()),
             }
-            let references = {
-                let decl = self.globals.get(key).expect("key exists");
-                match decl {
-                    Decl::Var(var) => {
-                        &var.global_var_references
-                    }
-                    _ => {return Ok(())}
-                }
-            };
+        };
 
-            for reference in references {
-                self.walk_var_declarations_impl(reference, visited, f)?;
-            }
+        for reference in references {
+            self.walk_var_declarations_impl(reference, visited, f)?;
+        }
 
-            let var = self.get_var(key);
-            f(var)?;
-            visited.insert(key.to_owned());
+        let var = self.get_var(key);
+        f(var)?;
+        visited.insert(key.to_owned());
 
-            Ok(())
+        Ok(())
     }
 
     fn check_var(&mut self, name: &String) -> Result<(), Error> {
@@ -339,7 +370,13 @@ impl Context<'_> {
                 expect_equal(left.start(), &left_types[0], &right_types[0])?;
                 if let Some(bi_typ) = Builtin::from_str(&left_types[0]) {
                     if bi_typ.supports_op(op) {
-                        return Ok(left_types);
+                        let typ = match op {
+                            ast::Op::Sub | ast::Op::Add | ast::Op::Mul | ast::Op::Div => {
+                                left_types[0].clone()
+                            }
+                            ast::Op::Gt | ast::Op::Lt => Builtin::Bool.to_str().to_string(),
+                        };
+                        return Ok(vec![typ]);
                     }
                 }
                 // TODO: Should this be the location of the operand?
@@ -351,10 +388,10 @@ impl Context<'_> {
             }
             ast::Expr::BracketExpr(_, expr) => self.check_expr(expr),
             ast::Expr::If {
-                start,
-                cond,
-                then,
-                else_,
+                start: _,
+                cond: _,
+                then: _,
+                else_: _,
             } => todo!("type checking if is not implemented yet"),
             ast::Expr::Block(_) => todo!("Type checking block is not implemented yet"),
         }
@@ -390,7 +427,7 @@ impl Context<'_> {
                     Ok(())
                 }
             }
-            ast::Expr::Op { left, right, op } => {
+            ast::Expr::Op { left, right, op: _ } => {
                 self.append_references(left, references)?;
                 self.append_references(right, references)?;
                 Ok(())
@@ -398,9 +435,9 @@ impl Context<'_> {
             ast::Expr::BracketExpr(_, expr) => self.append_references(expr, references),
             ast::Expr::If {
                 start: _,
-                cond,
-                then,
-                else_,
+                cond: _,
+                then: _,
+                else_: _,
             } => {
                 todo!("Getting references from if is not implemented")
             }

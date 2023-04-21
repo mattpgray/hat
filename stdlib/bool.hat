@@ -1,0 +1,3 @@
+var true: bool = 0 < 1;
+var false: bool = 0 > 1;
+

@@ -1,5 +1,5 @@
 {
     "return_code": 0,
     "stderr": "",
-    "stdout": "1\n0\n"
+    "stdout": "true\nfalse\n"
 }
